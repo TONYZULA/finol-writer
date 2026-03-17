@@ -1,101 +1,74 @@
-import os
-import json
-import requests
 import streamlit as st
-from litellm import completion
-from tavily import TavilyClient
+from automation import FinolAutomation
 
-class FinolAutomation:
-    def __init__(self, model):
-        """
-        Initializes the automation engine using Streamlit Secrets for credentials.
-        """
-        self.model = model
-        
-        # Pull keys from Streamlit Cloud Secrets
-        self.keys = {
-            "GOOGLE_API_KEY": st.secrets["GOOGLE_API_KEY"],
-            "TAVILY_API_KEY": st.secrets["TAVILY_API_KEY"],
-            "TEMPLATED_API_KEY": st.secrets["TEMPLATED_API_KEY"],
-            "OPENROUTER_API_KEY": st.secrets.get("OPENROUTER_API_KEY", "")
-        }
-        
-        self.tavily = TavilyClient(api_key=self.keys["TAVILY_API_KEY"])
-        
-        # Set environment variables for LiteLLM
-        os.environ["GOOGLE_API_KEY"] = self.keys["GOOGLE_API_KEY"]
-        os.environ["OPENROUTER_API_KEY"] = self.keys["OPENROUTER_API_KEY"]
+st.set_page_config(page_title="FINOL AI Writer", layout="wide")
 
-    def ai_call(self, system_prompt, user_prompt, json_mode=True):
-        """Universal AI caller for swappable models."""
-        response = completion(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            response_format={"type": "json_object"} if json_mode else None
-        )
-        return json.loads(response.choices[0].message.content)
+if 'draft' not in st.session_state: 
+    st.session_state.draft = ""
 
-    def generate_cover_image(self, topic):
-        """Triggers Templated.io and downloads binary image data."""
-        url = "https://api.templated.io/v1/render"
-        headers = {"Authorization": f"Bearer {self.keys['TEMPLATED_API_KEY']}"}
-        payload = {
-            "template": "d5222a01-a53b-4683-90af-20cd248ebd5f",
-            "format": "jpg",
-            "layers": {"text-4": {"text": topic}}
-        }
-        res = requests.post(url, json=payload, headers=headers).json()
-        img_res = requests.get(res.get("render_url"))
-        return img_res.content
+with st.sidebar:
+    st.title("Settings")
+    model = st.selectbox("Select AI Model", [
+        "google/gemini-2.5-pro",
+        "google/gemini-2.5-flash",
+        "openrouter/arcee-ai/trinity-large-preview:free",
+        "openrouter/arcee-ai/trinity-mini:free",
+        "openrouter/cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
+        "openrouter/google/gemma-3-12b-it:free",
+        "openrouter/google/gemma-3-27b-it:free",
+        "openrouter/google/gemma-3-4b-it:free",
+        "openrouter/google/gemma-3n-e2b-it:free",
+        "openrouter/google/gemma-3n-e4b-it:free",
+        "openrouter/liquid/lfm-2.5-1.2b-instruct:free",
+        "openrouter/liquid/lfm-2.5-1.2b-thinking:free",
+        "openrouter/meta-llama/llama-3.2-3b-instruct:free",
+        "openrouter/meta-llama/llama-3.3-70b-instruct:free",
+        "openrouter/minimax/minimax-m2.5:free",
+        "openrouter/mistralai/mistral-small-3.1-24b-instruct:free",
+        "openrouter/nousresearch/hermes-3-llama-3.1-405b:free",
+        "openrouter/nvidia/nemotron-3-nano-30b-a3b:free",
+        "openrouter/nvidia/nemotron-3-super-120b-a12b:free",
+        "openrouter/nvidia/nemotron-nano-12b-v2-vl:free",
+        "openrouter/nvidia/nemotron-nano-9b-v2:free",
+        "openrouter/openai/gpt-oss-120b:free",
+        "openrouter/openai/gpt-oss-20b:free",
+        "openrouter/openrouter/free",
+        "openrouter/qwen/qwen3-4b:free",
+        "openrouter/qwen/qwen3-coder:free",
+        "openrouter/qwen/qwen3-next-80b-a3b-instruct:free",
+        "openrouter/stepfun/step-3.5-flash:free",
+        "openrouter/z-ai/glm-4.5-air:free"
+    ])
+    
+    st.markdown("---")
+    st.subheader("WordPress Credentials")
+    wp_url = st.text_input("WP URL (https://...)")
+    wp_user = st.text_input("WP Username")
+    wp_pass = st.text_input("WP App Password", type="password")
 
-    def upload_to_wordpress(self, title, content, image_bytes, wp_config):
-        """Uploads media and publishes post to an online WP site."""
-        auth = (wp_config['user'], wp_config['pass'])
-        base_url = wp_config['url'].rstrip('/')
+st.title("🚀 FINOL Blog Writer")
 
-        # 1. Upload Media
-        media_url = f"{base_url}/wp-json/wp/v2/media"
-        headers = {
-            "Content-Disposition": 'attachment; filename="cover.jpg"', 
-            "Content-Type": "image/jpeg"
-        }
-        media_res = requests.post(media_url, data=image_bytes, headers=headers, auth=auth).json()
-        
-        # 2. Create Post
-        post_url = f"{base_url}/wp-json/wp/v2/posts"
-        payload = {
-            "title": title, 
-            "content": content, 
-            "status": "publish",
-            "featured_media": media_res.get("id")
-        }
-        post_res = requests.post(post_url, json=payload, auth=auth).json()
-        return post_res.get("link")
+with st.expander("Article Details", expanded=not st.session_state.draft):
+    topic = st.text_input("Topic")
+    audience = st.text_input("Audience")
+    goal = st.text_area("Goal")
+    target = st.number_input("Word Target", value=1000)
+    
+    if st.button("Generate Draft"):
+        agent = FinolAutomation(model)
+        with st.spinner("Writing..."):
+            st.session_state.draft = agent.run_writing_pipeline(topic, audience, goal, target)
+            st.rerun()
 
-    def run_writing_pipeline(self, topic, audience, goal, word_target):
-        """Executes the n8n research and writing logic sequence."""
-        # Researcher Step
-        res_sys = "Search and prep exactly 5 real article URLs... Return JSON url-1 through url-5."
-        search_res = self.tavily.search(query=f"{topic} {audience}")
-        urls = [r['url'] for r in search_res['results'][:5]]
-        
-        # SEO Step
-        seo_sys = "You are a blog SEO specialist. Identify primary and supporting keywords. Return JSON."
-        seo_data = self.ai_call(seo_sys, f"Topic: {topic}, Sources: {urls}")
+if st.session_state.draft:
+    st.subheader("Edit Content")
+    edited_text = st.text_area("Final Polish (Markdown)", value=st.session_state.draft, height=400)
+    st.session_state.draft = edited_text 
 
-        # Section Mapping Step
-        map_sys = "You are a blog outline planning agent. Sum of word counts must match target."
-        outline = self.ai_call(map_sys, f"Topic: {topic}, Target: {word_target}")
-
-        # Writing Loop
-        blog_content = ""
-        writer_sys = "You are a blog section writer. CTA: Include +919879972778 or +919925822542. Output JSON."
-        for section in outline['sections']:
-            section_input = f"Section: {section}, Keywords: {seo_data}, Blog so far: {blog_content}"
-            written = self.ai_call(writer_sys, section_input)
-            blog_content += f"\n\n{written['section_markdown']}"
-            
-        return blog_content
+    if st.button("✅ Publish to WordPress"):
+        wp_config = {"url": wp_url, "user": wp_user, "pass": wp_pass}
+        agent = FinolAutomation(model)
+        with st.spinner("Uploading Media & Post..."):
+            img = agent.generate_cover_image(topic)
+            link = agent.upload_to_wordpress(topic, edited_text, img, wp_config)
+            st.success(f"Published successfully! [View Post]({link})")
