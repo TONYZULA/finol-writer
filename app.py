@@ -57,8 +57,19 @@ with st.expander("Article Details", expanded=not st.session_state.draft):
     if st.button("Generate Draft"):
         agent = FinolAutomation(model)
         with st.spinner("Writing..."):
-            st.session_state.draft = agent.run_writing_pipeline(topic, audience, goal, target)
-            st.rerun()
+            try:
+                st.session_state.draft = agent.run_writing_pipeline(topic, audience, goal, target)
+                st.rerun()
+            except Exception as e:
+                st.error("Draft generation failed.")
+                st.info(
+                    "Common fixes (Streamlit Cloud):\n"
+                    "- Add `TAVILY_API_KEY`\n"
+                    "- If using `openrouter/...` models: add `OPENROUTER_API_KEY`\n"
+                    "- If using `google/gemini-...` models: add `GOOGLE_API_KEY`\n"
+                    "- If OpenRouter is blocked in your environment: set `OPENROUTER_API_BASE` (defaults to `https://openrouter.ai/api/v1`)\n"
+                )
+                st.exception(e)
 
 if st.session_state.draft:
     st.subheader("Edit Content")
