@@ -87,16 +87,79 @@ class FinolAutomation:
         return img_res.content
 
     def upload_to_wordpress(self, title, content, image_bytes, wp_config):
+        """Upload blog post with cover image to WordPress."""
         auth = (wp_config['user'], wp_config['pass'])
         base_url = wp_config['url'].rstrip('/')
-        media_url = f"{base_url}/wp-json/wp/v2/media"
-        headers = {"Content-Disposition": 'attachment; filename="cover.jpg"', "Content-Type": "image/jpeg"}
-        media_res = requests.post(media_url, data=image_bytes, headers=headers, auth=auth).json()
         
+        # Upload media (cover image)
+        media_url = f"{base_url}/wp-json/wp/v2/media"
+        headers = {
+            "Content-Disposition": 'attachment; filename="cover.jpg"',
+            "Content-Type": "image/jpeg"
+        }
+        
+        try:
+            media_response = requests.post(
+                media_url, 
+                data=image_bytes, 
+                headers=headers, 
+                auth=auth,
+                timeout=30
+            )
+            
+            # Check if response is successful
+            if media_response.status_code not in [200, 201]:
+                raise Exception(f"Media upload failed: {media_response.status_code} - {media_response.text[:200]}")
+            
+            # Try to parse JSON
+            try:
+                media_res = media_response.json()
+                media_id = media_res.get("id")
+            except:
+                # If JSON parsing fails, try to continue without featured image
+                media_id = None
+                
+        except Exception as e:
+            # If media upload fails, continue without featured image
+            st.warning(f"Cover image upload failed: {str(e)}. Continuing without image.")
+            media_id = None
+        
+        # Create post
         post_url = f"{base_url}/wp-json/wp/v2/posts"
-        payload = {"title": title, "content": content, "status": "publish", "featured_media": media_res.get("id")}
-        post_res = requests.post(post_url, json=payload, auth=auth).json()
-        return post_res.get("link")
+        payload = {
+            "title": title,
+            "content": content,
+            "status": "publish"
+        }
+        
+        # Add featured media if available
+        if media_id:
+            payload["featured_media"] = media_id
+        
+        try:
+            post_response = requests.post(
+                post_url, 
+                json=payload, 
+                auth=auth,
+                timeout=30
+            )
+            
+            # Check if response is successful
+            if post_response.status_code not in [200, 201]:
+                raise Exception(f"Post creation failed: {post_response.status_code} - {post_response.text[:200]}")
+            
+            # Try to parse JSON
+            try:
+                post_res = post_response.json()
+                return post_res.get("link", f"{base_url}/?p={post_res.get('id', 'unknown')}")
+            except:
+                # If JSON parsing fails but post was created, return base URL
+                if post_response.status_code in [200, 201]:
+                    return f"{base_url}/wp-admin/edit.php"
+                raise Exception("Failed to parse WordPress response")
+                
+        except Exception as e:
+            raise Exception(f"WordPress publishing failed: {str(e)}")
 
     def run_writing_pipeline(self, topic, audience, goal, word_target):
         if not self.tavily:

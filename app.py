@@ -97,17 +97,31 @@ with tab1:
         st.session_state.draft = edited_text 
 
         if st.button("✅ Publish to WordPress"):
-            wp_config = {"url": wp_url, "user": wp_user, "pass": wp_pass}
-            agent = FinolAutomation(model)
-            st.session_state.agent = agent
-            with st.spinner("Uploading Media & Post..."):
-                try:
-                    img = agent.generate_cover_image(topic)
-                    link = agent.upload_to_wordpress(topic, edited_text, img, wp_config)
-                    st.success(f"Published successfully! [View Post]({link})")
-                except Exception as e:
-                    st.error("Publishing failed.")
-                    st.exception(e)
+            # Validate WordPress credentials
+            if not wp_url or not wp_user or not wp_pass:
+                st.error("Please fill in all WordPress credentials (URL, Username, App Password)")
+            else:
+                wp_config = {"url": wp_url, "user": wp_user, "pass": wp_pass}
+                agent = FinolAutomation(model)
+                st.session_state.agent = agent
+                with st.spinner("Uploading Media & Post..."):
+                    try:
+                        img = agent.generate_cover_image(topic)
+                        link = agent.upload_to_wordpress(topic, edited_text, img, wp_config)
+                        st.success(f"Published successfully! [View Post]({link})")
+                    except Exception as e:
+                        st.error("Publishing failed.")
+                        st.info(
+                            "Common WordPress issues:\n"
+                            "- Verify WordPress URL is correct (include https://)\n"
+                            "- Use Application Password, not regular password\n"
+                            "- Check WordPress REST API is enabled\n"
+                            "- Verify user has publishing permissions\n"
+                            "- Check WordPress site is accessible\n\n"
+                            "To create Application Password:\n"
+                            "WordPress Admin → Users → Profile → Application Passwords"
+                        )
+                        st.exception(e)
 
 with tab2:
     if st.session_state.agent:
