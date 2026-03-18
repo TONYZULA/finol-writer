@@ -91,6 +91,10 @@ class FinolAutomation:
         auth = (wp_config['user'], wp_config['pass'])
         base_url = wp_config['url'].rstrip('/')
         
+        # Ensure base_url doesn't have trailing /wp-json
+        if base_url.endswith('/wp-json'):
+            base_url = base_url[:-8]
+        
         # Upload media (cover image)
         media_url = f"{base_url}/wp-json/wp/v2/media"
         headers = {
@@ -109,15 +113,16 @@ class FinolAutomation:
             
             # Check if response is successful
             if media_response.status_code not in [200, 201]:
-                raise Exception(f"Media upload failed: {media_response.status_code} - {media_response.text[:200]}")
-            
-            # Try to parse JSON
-            try:
-                media_res = media_response.json()
-                media_id = media_res.get("id")
-            except:
-                # If JSON parsing fails, try to continue without featured image
+                st.warning(f"Media upload returned {media_response.status_code}. Continuing without featured image.")
                 media_id = None
+            else:
+                # Try to parse JSON
+                try:
+                    media_res = media_response.json()
+                    media_id = media_res.get("id")
+                except:
+                    # If JSON parsing fails, try to continue without featured image
+                    media_id = None
                 
         except Exception as e:
             # If media upload fails, continue without featured image
@@ -137,6 +142,9 @@ class FinolAutomation:
             payload["featured_media"] = media_id
         
         try:
+            # Debug: Show the URL being used
+            st.info(f"Publishing to: {post_url}")
+            
             post_response = requests.post(
                 post_url, 
                 json=payload, 
@@ -145,8 +153,21 @@ class FinolAutomation:
             )
             
             # Check if response is successful
+            if post_response.status_code == 404:
+                # Try alternative URL format (some WordPress setups)
+                alt_post_url = f"{base_url}/index.php/wp-json/wp/v2/posts"
+                st.info(f"Trying alternative URL: {alt_post_url}")
+                
+                post_response = requests.post(
+                    alt_post_url,
+                    json=payload,
+                    auth=auth,
+                    timeout=30
+                )
+            
             if post_response.status_code not in [200, 201]:
-                raise Exception(f"Post creation failed: {post_response.status_code} - {post_response.text[:200]}")
+                error_detail = post_response.text[:500]
+                raise Exception(f"Post creation failed: {post_response.status_code} - {error_detail}")
             
             # Try to parse JSON
             try:
@@ -159,7 +180,18 @@ class FinolAutomation:
                 raise Exception("Failed to parse WordPress response")
                 
         except Exception as e:
-            raise Exception(f"WordPress publishing failed: {str(e)}")
+            # Provide helpful error message based on error type
+            error_msg = str(e)
+            if "404" in error_msg and "rest_no_route" in error_msg:
+                raise Exception(
+                    f"WordPress REST API not found. Please check:\n"
+                    f"1. Permalink Settings: Go to Settings → Permalinks → Select 'Post name' → Save\n"
+                    f"2. Verify URL is correct: {base_url}\n"
+                    f"3. Test REST API: Visit {base_url}/wp-json/wp/v2/posts in browser\n"
+                    f"Original error: {error_msg}"
+                )
+            else:
+                raise Exception(f"WordPress publishing failed: {error_msg}")
 
     def run_writing_pipeline(self, topic, audience, goal, word_target):
         if not self.tavily:
