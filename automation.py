@@ -210,26 +210,65 @@ class FinolAutomation:
         search_res = self.tavily.search(query=f"{topic} {audience}")
         urls = [r['url'] for r in search_res['results'][:5]]
         
-        # SEO phase
-        seo_sys = "You are a blog SEO specialist. Identify primary and supporting keywords. Return JSON with 'primary_keywords' and 'supporting_keywords' fields."
-        seo_data = self.ai_call(seo_sys, f"Topic: {topic}, Sources: {urls}")
+        # SEO phase - Focus on natural keyword integration
+        seo_sys = """You are a modern SEO specialist (2026 standards). 
+        Identify 3-5 PRIMARY keywords that are closely related and natural.
+        Avoid keyword stuffing - focus on semantic relevance and user intent.
+        Return JSON with:
+        - 'primary_keyword': The main focus keyword (1-3 words)
+        - 'related_keywords': 2-4 closely related semantic variations
+        - 'lsi_keywords': 3-5 Latent Semantic Indexing terms (natural synonyms)
+        
+        Modern SEO prioritizes:
+        1. Natural language and readability
+        2. Semantic relevance over exact matches
+        3. User intent over keyword density
+        4. Topic authority over keyword quantity"""
+        
+        seo_data = self.ai_call(seo_sys, f"Topic: {topic}, Audience: {audience}, Sources: {urls}")
         
         # Handle SEO data parsing errors
         if isinstance(seo_data, dict) and "error" in seo_data:
-            seo_data = {"primary_keywords": [topic], "supporting_keywords": [audience, goal]}
+            seo_data = {
+                "primary_keyword": topic,
+                "related_keywords": [audience],
+                "lsi_keywords": ["solutions", "strategies", "benefits"]
+            }
 
-        # Outline phase
-        map_sys = "You are a blog outline planning agent. Create an outline with sections. Return JSON with 'sections' array containing section objects with 'title' and 'word_count' fields."
-        outline = self.ai_call(map_sys, f"Topic: {topic}, Target: {word_target}, Goal: {goal}")
+        # Outline phase - Natural structure
+        map_sys = """You are a content strategist creating a natural, engaging blog outline.
+        Create sections that flow logically and tell a story.
+        Avoid repetitive keyword-heavy titles.
+        
+        Return JSON with 'sections' array containing objects with:
+        - 'title': Natural, engaging section title (NOT keyword-stuffed)
+        - 'word_count': Target words for this section
+        - 'focus': What this section should accomplish (value for reader)
+        
+        Good section titles:
+        ✅ "Why This Matters Now"
+        ✅ "The Real-World Impact"
+        ✅ "Getting Started: A Practical Approach"
+        
+        Bad section titles (avoid):
+        ❌ "AI Content Generation for Agencies Benefits"
+        ❌ "AI Creator Systems Advertising Solutions"
+        ❌ "AI Workflow Ad Agencies Implementation"
+        
+        Ensure total word count matches target."""
+        
+        outline = self.ai_call(map_sys, f"Topic: {topic}, Target: {word_target}, Goal: {goal}, Audience: {audience}")
         
         # Handle outline parsing errors
         if isinstance(outline, dict) and "error" in outline:
             # Create a default outline
             outline = {
                 "sections": [
-                    {"title": "Introduction", "word_count": word_target // 4},
-                    {"title": "Main Content", "word_count": word_target // 2},
-                    {"title": "Conclusion", "word_count": word_target // 4}
+                    {"title": "Introduction", "word_count": word_target // 5, "focus": "Hook reader and set context"},
+                    {"title": "The Current Landscape", "word_count": word_target // 4, "focus": "Explain the situation"},
+                    {"title": "Key Insights and Strategies", "word_count": word_target // 3, "focus": "Provide value"},
+                    {"title": "Practical Implementation", "word_count": word_target // 5, "focus": "Actionable steps"},
+                    {"title": "Looking Ahead", "word_count": word_target // 10, "focus": "Future perspective"}
                 ]
             }
         
@@ -237,21 +276,72 @@ class FinolAutomation:
         if not isinstance(outline, dict) or 'sections' not in outline:
             outline = {
                 "sections": [
-                    {"title": "Introduction", "word_count": word_target // 4},
-                    {"title": "Main Content", "word_count": word_target // 2},
-                    {"title": "Conclusion", "word_count": word_target // 4}
+                    {"title": "Introduction", "word_count": word_target // 5, "focus": "Hook reader"},
+                    {"title": "Main Content", "word_count": word_target // 2, "focus": "Core value"},
+                    {"title": "Conclusion", "word_count": word_target // 5, "focus": "Wrap up"}
                 ]
             }
 
-        # Writing phase
+        # Writing phase - Natural, engaging content
         blog_content = ""
-        writer_sys = "You are a blog section writer. Write engaging content. CTA: Include +919879972778 or +919925822542. Return JSON with 'section_markdown' field containing the written content."
+        writer_sys = """You are an expert content writer creating engaging, natural blog content.
+
+CRITICAL RULES FOR MODERN SEO (2026):
+1. Write for HUMANS first, search engines second
+2. Use keywords NATURALLY - never force them
+3. Vary your language - use synonyms and semantic variations
+4. Focus on providing VALUE and answering user intent
+5. Avoid repetitive phrases and keyword stuffing
+6. Write conversationally and authentically
+
+KEYWORD USAGE GUIDELINES:
+- Primary keyword: Use 2-3 times naturally in the entire section
+- Related keywords: Sprinkle 1-2 times if they fit naturally
+- LSI keywords: Use freely as they're natural synonyms
+- NEVER start multiple paragraphs with the same keyword phrase
+- NEVER repeat exact keyword phrases back-to-back
+
+WRITING STYLE:
+- Conversational and engaging
+- Clear and concise
+- Use examples and stories
+- Break up text with varied sentence structure
+- Focus on reader benefit
+
+INCLUDE NATURALLY (not forced):
+- Contact: +919879972778 or +919925822542 (mention once, contextually)
+
+Return JSON with 'section_markdown' field containing well-written content.
+
+BAD EXAMPLE (keyword stuffing):
+"From AI content generation for agencies to sophisticated AI creator systems advertising, AI workflow ad agencies are transforming. AI strategy ad agencies using AI tools for ad agencies..."
+
+GOOD EXAMPLE (natural):
+"Modern agencies are discovering how artificial intelligence transforms their workflow. From content creation to campaign optimization, these tools are reshaping how teams work..."
+"""
         
         for section in outline['sections']:
             section_title = section.get('title', 'Section') if isinstance(section, dict) else str(section)
             section_words = section.get('word_count', 200) if isinstance(section, dict) else 200
+            section_focus = section.get('focus', 'Provide value') if isinstance(section, dict) else 'Provide value'
             
-            section_input = f"Section: {section_title}, Target words: {section_words}, Keywords: {seo_data}, Blog so far: {blog_content[:500]}"
+            section_input = f"""
+Section Title: {section_title}
+Target Words: {section_words}
+Section Focus: {section_focus}
+
+SEO Keywords (use naturally, don't force):
+- Primary: {seo_data.get('primary_keyword', topic)}
+- Related: {', '.join(seo_data.get('related_keywords', [])[:3])}
+- LSI: {', '.join(seo_data.get('lsi_keywords', [])[:5])}
+
+Context: {topic} for {audience}
+Goal: {goal}
+
+Previous content (for context, don't repeat): {blog_content[-300:] if blog_content else 'This is the first section'}
+
+Write engaging, natural content that provides real value. Avoid keyword stuffing.
+"""
             
             try:
                 written = self.ai_call(writer_sys, section_input)
