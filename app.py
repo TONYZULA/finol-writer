@@ -1,13 +1,24 @@
 import streamlit as st
 from automation import FinolAutomation
+from provider_dashboard import (
+    show_provider_status,
+    show_call_history,
+    show_provider_selector,
+    show_fallback_info,
+    show_debug_panel,
+)
 
 st.set_page_config(page_title="FINOL AI Writer", layout="wide")
 
 if 'draft' not in st.session_state: 
     st.session_state.draft = ""
+if 'agent' not in st.session_state:
+    st.session_state.agent = None
 
 with st.sidebar:
-    st.title("Settings")
+    st.title("⚙️ Settings")
+    
+    # Provider and model selection
     model = st.selectbox("Select AI Model", [
         "google/gemini-2.5-pro",
         "google/gemini-2.5-flash",
@@ -45,41 +56,69 @@ with st.sidebar:
     wp_url = st.text_input("WP URL (https://...)")
     wp_user = st.text_input("WP Username")
     wp_pass = st.text_input("WP App Password", type="password")
+    
+    st.markdown("---")
+    show_fallback_info()
 
 st.title("🚀 FINOL Blog Writer")
 
-with st.expander("Article Details", expanded=not st.session_state.draft):
-    topic = st.text_input("Topic")
-    audience = st.text_input("Audience")
-    goal = st.text_area("Goal")
-    target = st.number_input("Word Target", value=1000)
-    
-    if st.button("Generate Draft"):
-        agent = FinolAutomation(model)
-        with st.spinner("Writing..."):
-            try:
-                st.session_state.draft = agent.run_writing_pipeline(topic, audience, goal, target)
-                st.rerun()
-            except Exception as e:
-                st.error("Draft generation failed.")
-                st.info(
-                    "Common fixes (Streamlit Cloud):\n"
-                    "- Add `TAVILY_API_KEY`\n"
-                    "- If using `openrouter/...` models: add `OPENROUTER_API_KEY`\n"
-                    "- If using `google/gemini-...` models: add `GOOGLE_API_KEY`\n"
-                    "- If OpenRouter is blocked in your environment: set `OPENROUTER_API_BASE` (defaults to `https://openrouter.ai/api/v1`)\n"
-                )
-                st.exception(e)
+# Tabs for main content and monitoring
+tab1, tab2, tab3 = st.tabs(["✍️ Write Article", "📊 Provider Monitor", "🔧 Debug"])
 
-if st.session_state.draft:
-    st.subheader("Edit Content")
-    edited_text = st.text_area("Final Polish (Markdown)", value=st.session_state.draft, height=400)
-    st.session_state.draft = edited_text 
+with tab1:
+    with st.expander("Article Details", expanded=not st.session_state.draft):
+        topic = st.text_input("Topic")
+        audience = st.text_input("Audience")
+        goal = st.text_area("Goal")
+        target = st.number_input("Word Target", value=1000)
+        
+        if st.button("Generate Draft"):
+            agent = FinolAutomation(model)
+            st.session_state.agent = agent
+            with st.spinner("Writing..."):
+                try:
+                    st.session_state.draft = agent.run_writing_pipeline(topic, audience, goal, target)
+                    st.rerun()
+                except Exception as e:
+                    st.error("Draft generation failed.")
+                    st.info(
+                        "Common fixes (Streamlit Cloud):\n"
+                        "- Add `TAVILY_API_KEY`\n"
+                        "- If using `openrouter/...` models: add `OPENROUTER_API_KEY`\n"
+                        "- If using `google/gemini-...` models: add `GOOGLE_API_KEY`\n"
+                        "- If using Bytez models: add `BYTEZ_API_KEY`\n"
+                        "- If OpenRouter is blocked in your environment: set `OPENROUTER_API_BASE`\n"
+                    )
+                    st.exception(e)
 
-    if st.button("✅ Publish to WordPress"):
-        wp_config = {"url": wp_url, "user": wp_user, "pass": wp_pass}
-        agent = FinolAutomation(model)
-        with st.spinner("Uploading Media & Post..."):
-            img = agent.generate_cover_image(topic)
-            link = agent.upload_to_wordpress(topic, edited_text, img, wp_config)
-            st.success(f"Published successfully! [View Post]({link})")
+    if st.session_state.draft:
+        st.subheader("Edit Content")
+        edited_text = st.text_area("Final Polish (Markdown)", value=st.session_state.draft, height=400)
+        st.session_state.draft = edited_text 
+
+        if st.button("✅ Publish to WordPress"):
+            wp_config = {"url": wp_url, "user": wp_user, "pass": wp_pass}
+            agent = FinolAutomation(model)
+            st.session_state.agent = agent
+            with st.spinner("Uploading Media & Post..."):
+                try:
+                    img = agent.generate_cover_image(topic)
+                    link = agent.upload_to_wordpress(topic, edited_text, img, wp_config)
+                    st.success(f"Published successfully! [View Post]({link})")
+                except Exception as e:
+                    st.error("Publishing failed.")
+                    st.exception(e)
+
+with tab2:
+    if st.session_state.agent:
+        show_provider_status(st.session_state.agent)
+        st.divider()
+        show_call_history(st.session_state.agent)
+    else:
+        st.info("Generate a draft first to see provider statistics")
+
+with tab3:
+    if st.session_state.agent:
+        show_debug_panel(st.session_state.agent)
+    else:
+        st.info("Generate a draft first to see debug information")

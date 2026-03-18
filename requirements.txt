@@ -3,3 +3,4 @@ litellm==1.82.4
 requests==2.31.0
 python-dotenv==1.0.0
 tavily-python==0.7.23
+httpx==0.24.1

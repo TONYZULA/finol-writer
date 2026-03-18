@@ -2,14 +2,8 @@ import os
 import json
 import requests
 import streamlit as st
-from litellm import completion
-from litellm.exceptions import (
-    APIConnectionError,
-    AuthenticationError,
-    BadRequestError,
-    RateLimitError,
-)
 from tavily import TavilyClient
+from provider_manager import ProviderManager
 
 class FinolAutomation:
     def __init__(self, model):
@@ -24,7 +18,11 @@ class FinolAutomation:
             "OPENROUTER_API_BASE": st.secrets.get("OPENROUTER_API_BASE", "https://openrouter.ai/api/v1"),
             "OR_SITE_URL": st.secrets.get("OR_SITE_URL", ""),
             "OR_APP_NAME": st.secrets.get("OR_APP_NAME", ""),
+            "BYTEZ_API_KEY": st.secrets.get("BYTEZ_API_KEY", ""),
         }
+        
+        # Initialize provider manager for multi-provider fallback
+        self.provider_manager = ProviderManager(self.keys)
         
         # Initialization logic
         if not self.keys["TAVILY_API_KEY"]:
@@ -32,78 +30,19 @@ class FinolAutomation:
             self.tavily = None
         else:
             self.tavily = TavilyClient(api_key=self.keys["TAVILY_API_KEY"])
-        
-        # Set environment variables for LiteLLM
-        os.environ["GOOGLE_API_KEY"] = self.keys["GOOGLE_API_KEY"]
-        os.environ["OPENROUTER_API_KEY"] = self.keys["OPENROUTER_API_KEY"]
-        os.environ["OPENROUTER_API_BASE"] = self.keys["OPENROUTER_API_BASE"]
-        if self.keys["OR_SITE_URL"]:
-            os.environ["OR_SITE_URL"] = self.keys["OR_SITE_URL"]
-        if self.keys["OR_APP_NAME"]:
-            os.environ["OR_APP_NAME"] = self.keys["OR_APP_NAME"]
-
-        self._normalized_model = self._normalize_model_name(self.model)
-        self._validate_provider_keys()
-
-    def _normalize_model_name(self, model: str) -> str:
-        """
-        Streamlit UI uses friendly model IDs. LiteLLM expects provider prefixes.
-        - Direct Gemini (API key) uses: gemini/gemini-*
-        - OpenRouter uses: openrouter/<provider>/<model>
-        """
-        m = (model or "").strip()
-        if m.startswith("google/gemini-"):
-            # Map "google/gemini-2.5-pro" -> "gemini/gemini-2.5-pro"
-            return "gemini/" + m.replace("google/", "", 1)
-        return m
-
-    def _validate_provider_keys(self) -> None:
-        m = self._normalized_model
-        if m.startswith("openrouter/") and not self.keys["OPENROUTER_API_KEY"]:
-            st.error("Missing OPENROUTER_API_KEY in Streamlit Secrets (required for OpenRouter models).")
-        if m.startswith("gemini/") and not self.keys["GOOGLE_API_KEY"]:
-            st.error("Missing GOOGLE_API_KEY in Streamlit Secrets (required for direct Gemini models).")
 
     def ai_call(self, system_prompt, user_prompt, json_mode=True):
-        model = self._normalized_model
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ]
-
-        # Explicit base_url improves reliability on some LiteLLM versions/environments
-        base_url = self.keys["OPENROUTER_API_BASE"] if model.startswith("openrouter/") else None
-
-        last_err = None
-        for attempt in range(1, 4):
-            try:
-                response = completion(
-                    model=model,
-                    messages=messages,
-                    response_format={"type": "json_object"} if json_mode else None,
-                    base_url=base_url,
-                    timeout=60,
-                )
-                content = response.choices[0].message.content or ""
-                return self._safe_json_loads(content) if json_mode else content
-            except (APIConnectionError, RateLimitError) as e:
-                last_err = e
-                # Basic backoff (1s, 2s, 4s)
-                import time
-                time.sleep(2 ** (attempt - 1))
-                continue
-            except AuthenticationError as e:
-                raise RuntimeError(
-                    "Authentication failed. Verify the correct API key is set in Streamlit Secrets "
-                    f"for model={model}."
-                ) from e
-            except BadRequestError as e:
-                # Some models don't support response_format; retry once without JSON mode.
-                if json_mode:
-                    json_mode = False
-                    continue
-                raise
-        raise last_err if last_err else RuntimeError("LLM call failed for unknown reasons.")
+        """
+        Make AI call with automatic multi-provider fallback.
+        Tries preferred model first, then falls back to other providers.
+        """
+        content = self.provider_manager.ai_call(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            preferred_model=self.model,
+            json_mode=json_mode,
+        )
+        return self._safe_json_loads(content) if json_mode else content
 
     def _safe_json_loads(self, text: str):
         try:
