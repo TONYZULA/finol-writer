@@ -106,9 +106,17 @@ with tab1:
                 st.session_state.agent = agent
                 with st.spinner("Uploading Media & Post..."):
                     try:
+                        # Generate cover image
                         img = agent.generate_cover_image(topic)
+                        
+                        # Upload to WordPress (with or without image)
                         link = agent.upload_to_wordpress(topic, edited_text, img, wp_config)
                         st.success(f"Published successfully! [View Post]({link})")
+                        
+                        # Show warning if no featured image
+                        if img is None:
+                            st.warning("Post published without featured image. Check TEMPLATED_API_KEY in Secrets.")
+                            
                     except Exception as e:
                         st.error("Publishing failed.")
                         st.info(

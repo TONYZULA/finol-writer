@@ -95,39 +95,47 @@ class FinolAutomation:
         if base_url.endswith('/wp-json'):
             base_url = base_url[:-8]
         
-        # Upload media (cover image)
-        media_url = f"{base_url}/wp-json/wp/v2/media"
-        headers = {
-            "Content-Disposition": 'attachment; filename="cover.jpg"',
-            "Content-Type": "image/jpeg"
-        }
+        media_id = None
         
-        try:
-            media_response = requests.post(
-                media_url, 
-                data=image_bytes, 
-                headers=headers, 
-                auth=auth,
-                timeout=30
-            )
+        # Only try to upload image if we have image bytes
+        if image_bytes:
+            # Upload media (cover image)
+            media_url = f"{base_url}/wp-json/wp/v2/media"
+            headers = {
+                "Content-Disposition": 'attachment; filename="cover.jpg"',
+                "Content-Type": "image/jpeg"
+            }
             
-            # Check if response is successful
-            if media_response.status_code not in [200, 201]:
-                st.warning(f"Media upload returned {media_response.status_code}. Continuing without featured image.")
-                media_id = None
-            else:
-                # Try to parse JSON
-                try:
-                    media_res = media_response.json()
-                    media_id = media_res.get("id")
-                except:
-                    # If JSON parsing fails, try to continue without featured image
-                    media_id = None
+            try:
+                media_response = requests.post(
+                    media_url, 
+                    data=image_bytes, 
+                    headers=headers, 
+                    auth=auth,
+                    timeout=30
+                )
                 
-        except Exception as e:
-            # If media upload fails, continue without featured image
-            st.warning(f"Cover image upload failed: {str(e)}. Continuing without image.")
-            media_id = None
+                # Check if response is successful
+                if media_response.status_code not in [200, 201]:
+                    st.warning(f"Media upload returned {media_response.status_code}. Continuing without featured image.")
+                    media_id = None
+                else:
+                    # Try to parse JSON
+                    try:
+                        media_res = media_response.json()
+                        media_id = media_res.get("id")
+                        if media_id:
+                            st.success(f"✅ Featured image uploaded successfully!")
+                    except:
+                        # If JSON parsing fails, try to continue without featured image
+                        media_id = None
+                    
+            except Exception as e:
+                # If media upload fails, continue without featured image
+                st.warning(f"Cover image upload failed: {str(e)}. Continuing without image.")
+                media_id = None
+        else:
+            st.info("No cover image provided. Publishing without featured image.")
         
         # Create post
         post_url = f"{base_url}/wp-json/wp/v2/posts"
