@@ -8,10 +8,13 @@ Your code has been successfully pushed to: `https://github.com/TONYZULA/finol-wr
 
 ## 🚀 Next Steps to Deploy on Streamlit Cloud
 
-### Step 1: Access Streamlit Cloud
+### Step 1: Access Streamlit Cloud & Set Python Version
 - [ ] Go to [share.streamlit.io](https://share.streamlit.io)
 - [ ] Sign in with your GitHub account
 - [ ] Find your app: **finol-writer**
+- [ ] Click **Settings** → **Advanced settings**
+- [ ] Set **Python version** to **3.11** (NOT 3.14)
+- [ ] Click **Save**
 
 ### Step 2: Configure Secrets (CRITICAL)
 - [ ] Click on your app
