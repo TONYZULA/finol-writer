@@ -2,4 +2,4 @@ streamlit==1.31.0
 litellm==1.82.4
 requests==2.31.0
 python-dotenv==1.0.0
-tavily-python==0.3.1
+tavily-python==0.7.23
