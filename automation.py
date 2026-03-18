@@ -42,9 +42,22 @@ class FinolAutomation:
             preferred_model=self.model,
             json_mode=json_mode,
         )
-        return self._safe_json_loads(content) if json_mode else content
+        
+        if json_mode:
+            # If content is already a dict, return it
+            if isinstance(content, dict):
+                return content
+            # Otherwise try to parse as JSON
+            return self._safe_json_loads(content)
+        else:
+            return content
 
     def _safe_json_loads(self, text: str):
+        """Safely parse JSON from text, handling various formats."""
+        # If already a dict, return it
+        if isinstance(text, dict):
+            return text
+            
         try:
             return json.loads(text)
         except Exception:
@@ -52,8 +65,14 @@ class FinolAutomation:
             start = text.find("{")
             end = text.rfind("}")
             if start != -1 and end != -1 and end > start:
-                return json.loads(text[start : end + 1])
-            raise
+                try:
+                    return json.loads(text[start : end + 1])
+                except:
+                    pass
+            
+            # If all JSON parsing fails, return a safe default structure
+            # This prevents KeyError when accessing expected fields
+            return {"error": "Failed to parse JSON", "raw_content": str(text)}
 
     def generate_cover_image(self, topic):
         url = "https://api.templated.io/v1/render"
@@ -83,21 +102,75 @@ class FinolAutomation:
         if not self.tavily:
             return "Error: Research tool not initialized."
         
+        # Research phase
         res_sys = "Search and prep exactly 5 real article URLs... Return JSON url-1 through url-5."
         search_res = self.tavily.search(query=f"{topic} {audience}")
         urls = [r['url'] for r in search_res['results'][:5]]
         
-        seo_sys = "You are a blog SEO specialist. Identify primary and supporting keywords. Return JSON."
+        # SEO phase
+        seo_sys = "You are a blog SEO specialist. Identify primary and supporting keywords. Return JSON with 'primary_keywords' and 'supporting_keywords' fields."
         seo_data = self.ai_call(seo_sys, f"Topic: {topic}, Sources: {urls}")
+        
+        # Handle SEO data parsing errors
+        if isinstance(seo_data, dict) and "error" in seo_data:
+            seo_data = {"primary_keywords": [topic], "supporting_keywords": [audience, goal]}
 
-        map_sys = "You are a blog outline planning agent. Sum of word counts must match target."
-        outline = self.ai_call(map_sys, f"Topic: {topic}, Target: {word_target}")
+        # Outline phase
+        map_sys = "You are a blog outline planning agent. Create an outline with sections. Return JSON with 'sections' array containing section objects with 'title' and 'word_count' fields."
+        outline = self.ai_call(map_sys, f"Topic: {topic}, Target: {word_target}, Goal: {goal}")
+        
+        # Handle outline parsing errors
+        if isinstance(outline, dict) and "error" in outline:
+            # Create a default outline
+            outline = {
+                "sections": [
+                    {"title": "Introduction", "word_count": word_target // 4},
+                    {"title": "Main Content", "word_count": word_target // 2},
+                    {"title": "Conclusion", "word_count": word_target // 4}
+                ]
+            }
+        
+        # Ensure sections exist
+        if not isinstance(outline, dict) or 'sections' not in outline:
+            outline = {
+                "sections": [
+                    {"title": "Introduction", "word_count": word_target // 4},
+                    {"title": "Main Content", "word_count": word_target // 2},
+                    {"title": "Conclusion", "word_count": word_target // 4}
+                ]
+            }
 
+        # Writing phase
         blog_content = ""
-        writer_sys = "You are a blog section writer. CTA: Include +919879972778 or +919925822542. Output JSON."
+        writer_sys = "You are a blog section writer. Write engaging content. CTA: Include +919879972778 or +919925822542. Return JSON with 'section_markdown' field containing the written content."
+        
         for section in outline['sections']:
-            section_input = f"Section: {section}, Keywords: {seo_data}, Blog so far: {blog_content}"
-            written = self.ai_call(writer_sys, section_input)
-            blog_content += f"\n\n{written['section_markdown']}"
+            section_title = section.get('title', 'Section') if isinstance(section, dict) else str(section)
+            section_words = section.get('word_count', 200) if isinstance(section, dict) else 200
+            
+            section_input = f"Section: {section_title}, Target words: {section_words}, Keywords: {seo_data}, Blog so far: {blog_content[:500]}"
+            
+            try:
+                written = self.ai_call(writer_sys, section_input)
+                
+                # Handle different response formats
+                if isinstance(written, dict):
+                    if 'section_markdown' in written:
+                        blog_content += f"\n\n{written['section_markdown']}"
+                    elif 'content' in written:
+                        blog_content += f"\n\n{written['content']}"
+                    elif 'raw_content' in written:
+                        blog_content += f"\n\n{written['raw_content']}"
+                    else:
+                        # If no expected field, use the whole dict as string
+                        blog_content += f"\n\n## {section_title}\n\n{str(written)}"
+                elif isinstance(written, str):
+                    blog_content += f"\n\n## {section_title}\n\n{written}"
+                else:
+                    blog_content += f"\n\n## {section_title}\n\n{str(written)}"
+                    
+            except Exception as e:
+                # If section writing fails, add a placeholder
+                blog_content += f"\n\n## {section_title}\n\n[Content generation failed for this section: {str(e)}]"
             
         return blog_content
