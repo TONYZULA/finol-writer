@@ -101,7 +101,11 @@ with tab1:
             if not wp_url or not wp_user or not wp_pass:
                 st.error("Please fill in all WordPress credentials (URL, Username, App Password)")
             else:
-                wp_config = {"url": wp_url, "user": wp_user, "pass": wp_pass}
+                wp_config = {
+                    "url": wp_url.strip(), 
+                    "user": wp_user.strip(), 
+                    "pass": wp_pass.strip()
+                }
                 agent = FinolAutomation(model)
                 st.session_state.agent = agent
                 with st.spinner("Uploading Media & Post..."):

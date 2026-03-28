@@ -88,8 +88,13 @@ class FinolAutomation:
 
     def upload_to_wordpress(self, title, content, image_bytes, wp_config):
         """Upload blog post with cover image to WordPress."""
-        auth = (wp_config['user'], wp_config['pass'])
-        base_url = wp_config['url'].rstrip('/')
+        # Clean and validate credentials
+        user = str(wp_config.get('user', '')).strip()
+        password = str(wp_config.get('pass', '')).strip()
+        url = str(wp_config.get('url', '')).strip().rstrip('/')
+        
+        auth = (user, password)
+        base_url = url
         
         # Ensure base_url doesn't have trailing /wp-json
         if base_url.endswith('/wp-json'):
