@@ -1,6 +1,6 @@
 """
-Multi-provider AI fallback system for blog automation.
-Intelligently rotates between Gemini, OpenRouter, and Bytez with automatic failover.
+AI provider manager for blog automation.
+Bytez-only implementation with health tracking and retry logic.
 """
 
 import os
@@ -55,24 +55,12 @@ class ProviderManager:
         self.retry_backoff_base = 2  # exponential backoff: 2^n seconds
         
     def _setup_environment(self):
-        """Set up environment variables for all providers."""
-        os.environ["GOOGLE_API_KEY"] = self.secrets.get("GOOGLE_API_KEY", "")
-        os.environ["OPENROUTER_API_KEY"] = self.secrets.get("OPENROUTER_API_KEY", "")
+        """Set up environment variables for Bytez."""
         os.environ["BYTEZ_API_KEY"] = self.secrets.get("BYTEZ_API_KEY", "")
-        os.environ["OPENROUTER_API_BASE"] = self.secrets.get(
-            "OPENROUTER_API_BASE", "https://openrouter.ai/api/v1"
-        )
-        if self.secrets.get("OR_SITE_URL"):
-            os.environ["OR_SITE_URL"] = self.secrets["OR_SITE_URL"]
-        if self.secrets.get("OR_APP_NAME"):
-            os.environ["OR_APP_NAME"] = self.secrets["OR_APP_NAME"]
     
     def _initialize_providers(self) -> List[ProviderConfig]:
-        """Initialize all available providers."""
+        """Initialize only the Bytez provider as requested."""
         return [
-            ProviderConfig("gemini", "GOOGLE_API_KEY"),
-            ProviderConfig("openrouter", "OPENROUTER_API_KEY", 
-                          self.secrets.get("OPENROUTER_API_BASE", "https://openrouter.ai/api/v1")),
             ProviderConfig("bytez", "BYTEZ_API_KEY", "https://api.bytez.com/v1"),
         ]
     
@@ -126,28 +114,12 @@ class ProviderManager:
         Returns:
             Normalized model name for the provider
         """
-        if provider == "gemini":
-            if model.startswith("google/gemini-"):
-                return "gemini/" + model.replace("google/", "", 1)
-            elif model.startswith("gemini/"):
-                return model
-            else:
-                return "gemini/gemini-2.5-flash"
-        
-        elif provider == "openrouter":
-            if model.startswith("openrouter/"):
-                return model
-            else:
-                return "openrouter/google/gemma-3-4b-it:free"
-        
-        elif provider == "bytez":
-            # Map to Bytez model format
-            if model.startswith("google/gemini-"):
+        if provider == "bytez":
+            # Bytez accepts direct model identifiers; keep as-is when provided.
+            # Fallback to a safe default if the model is missing.
+            if not model or model == "default":
                 return "google/gemini-2.5-flash"
-            elif model.startswith("openrouter/"):
-                return "google/gemini-2.5-flash"
-            else:
-                return "google/gemini-2.5-flash"
+            return model
         
         return model
     
@@ -188,7 +160,7 @@ class ProviderManager:
     def ai_call(self, system_prompt: str, user_prompt: str, 
                 preferred_model: str = None, json_mode: bool = True) -> str:
         """
-        Make AI call with automatic fallback between providers.
+        Make AI call with Bytez provider and retry logic.
         
         Args:
             system_prompt: System message for the AI

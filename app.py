@@ -19,36 +19,14 @@ with st.sidebar:
     st.title("⚙️ Settings")
     
     # Provider and model selection
-    model = st.selectbox("Select AI Model", [
+    model = st.selectbox("Select AI Model (Bytez)", [
         "google/gemini-2.5-pro",
         "google/gemini-2.5-flash",
-        "openrouter/arcee-ai/trinity-large-preview:free",
-        "openrouter/arcee-ai/trinity-mini:free",
-        "openrouter/cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
-        "openrouter/google/gemma-3-12b-it:free",
-        "openrouter/google/gemma-3-27b-it:free",
-        "openrouter/google/gemma-3-4b-it:free",
-        "openrouter/google/gemma-3n-e2b-it:free",
-        "openrouter/google/gemma-3n-e4b-it:free",
-        "openrouter/liquid/lfm-2.5-1.2b-instruct:free",
-        "openrouter/liquid/lfm-2.5-1.2b-thinking:free",
-        "openrouter/meta-llama/llama-3.2-3b-instruct:free",
-        "openrouter/meta-llama/llama-3.3-70b-instruct:free",
-        "openrouter/minimax/minimax-m2.5:free",
-        "openrouter/mistralai/mistral-small-3.1-24b-instruct:free",
-        "openrouter/nousresearch/hermes-3-llama-3.1-405b:free",
-        "openrouter/nvidia/nemotron-3-nano-30b-a3b:free",
-        "openrouter/nvidia/nemotron-3-super-120b-a12b:free",
-        "openrouter/nvidia/nemotron-nano-12b-v2-vl:free",
-        "openrouter/nvidia/nemotron-nano-9b-v2:free",
-        "openrouter/openai/gpt-oss-120b:free",
-        "openrouter/openai/gpt-oss-20b:free",
-        "openrouter/openrouter/free",
-        "openrouter/qwen/qwen3-4b:free",
-        "openrouter/qwen/qwen3-coder:free",
-        "openrouter/qwen/qwen3-next-80b-a3b-instruct:free",
-        "openrouter/stepfun/step-3.5-flash:free",
-        "openrouter/z-ai/glm-4.5-air:free"
+        "google/gemini-2.5-flash-lite",
+        "openai/gpt-4o-mini",
+        "anthropic/claude-sonnet-4-5",
+        "Qwen/Qwen3-4B",
+        "meta-llama/Llama-2-7b-chat-hf",
     ])
     
     st.markdown("---")
@@ -106,10 +84,7 @@ with tab1:
                     st.info(
                         "Common fixes (Streamlit Cloud):\n"
                         "- Add `TAVILY_API_KEY`\n"
-                        "- If using `openrouter/...` models: add `OPENROUTER_API_KEY`\n"
-                        "- If using `google/gemini-...` models: add `GOOGLE_API_KEY`\n"
-                        "- If using Bytez models: add `BYTEZ_API_KEY`\n"
-                        "- If OpenRouter is blocked in your environment: set `OPENROUTER_API_BASE`\n"
+                        "- Add `BYTEZ_API_KEY`\n"
                     )
                     st.exception(e)
 
@@ -132,16 +107,9 @@ with tab1:
                 st.session_state.agent = agent
                 with st.spinner("Uploading Media & Post..."):
                     try:
-                        # Generate cover image
-                        img = agent.generate_cover_image(topic)
-                        
-                        # Upload to WordPress (with or without image)
-                        link = agent.upload_to_wordpress(topic, edited_text, img, wp_config)
+                        # Upload to WordPress (without cover image)
+                        link = agent.upload_to_wordpress(topic, edited_text, None, wp_config)
                         st.success(f"Published successfully! [View Post]({link})")
-                        
-                        # Show warning if no featured image
-                        if img is None:
-                            st.warning("Post published without featured image. Check TEMPLATED_API_KEY in Secrets.")
                             
                     except Exception as e:
                         st.error("Publishing failed.")

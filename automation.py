@@ -12,13 +12,8 @@ class FinolAutomation:
         
         # Safe loading from st.secrets to prevent blank screen crashes
         self.keys = {
-            "GOOGLE_API_KEY": st.secrets.get("GOOGLE_API_KEY", ""),
             "TAVILY_API_KEY": st.secrets.get("TAVILY_API_KEY", ""),
             "TEMPLATED_API_KEY": st.secrets.get("TEMPLATED_API_KEY", ""),
-            "OPENROUTER_API_KEY": st.secrets.get("OPENROUTER_API_KEY", ""),
-            "OPENROUTER_API_BASE": st.secrets.get("OPENROUTER_API_BASE", "https://openrouter.ai/api/v1"),
-            "OR_SITE_URL": st.secrets.get("OR_SITE_URL", ""),
-            "OR_APP_NAME": st.secrets.get("OR_APP_NAME", ""),
             "BYTEZ_API_KEY": st.secrets.get("BYTEZ_API_KEY", ""),
         }
         
@@ -119,6 +114,8 @@ class FinolAutomation:
             return {"error": "Failed to parse JSON", "raw_content": str(text)}
 
     def generate_cover_image(self, topic):
+        if not self.keys.get("TEMPLATED_API_KEY"):
+            return None
         url = "https://api.templated.io/v1/render"
         headers = {"Authorization": f"Bearer {self.keys['TEMPLATED_API_KEY']}"}
         payload = {
@@ -127,7 +124,12 @@ class FinolAutomation:
             "layers": {"text-4": {"text": topic}}
         }
         res = requests.post(url, json=payload, headers=headers).json()
-        img_res = requests.get(res.get("render_url"))
+        render_url = res.get("render_url")
+        if not render_url:
+            return None
+        img_res = requests.get(render_url, timeout=30)
+        if img_res.status_code != 200:
+            return None
         return img_res.content
 
     def upload_to_wordpress(self, title, content, image_bytes, wp_config):
@@ -272,35 +274,31 @@ class FinolAutomation:
         all_suggestions = (knowledge_base or []) + internal_links
         links_context = ""
         if all_suggestions:
-            links_context = "\nINTERNAL LINKING SUGGESTIONS (Link to these naturally if relevant):\n"
+            links_context = "\nINTERNAL LINKING SUGGESTIONS (use markdown links):\n"
             for link in all_suggestions:
-                links_context += f"- {link.get('title')}: {link.get('url')}\n"
+                title = link.get('title')
+                url = link.get('url')
+                if title and url:
+                    links_context += f"- [{title}]({url})\n"
 
-        # Research phase - Articles and Images
+        # Research phase - Articles
         try:
-            search_res = self.tavily.search(query=f"{topic} {audience}", search_depth="advanced", include_images=True)
+            search_res = self.tavily.search(query=f"{topic} {audience}", search_depth="advanced", include_images=False)
             urls = [r['url'] for r in search_res.get('results', [])[:5]]
-            images = [img['url'] for img in search_res.get('images', [])[:5]]
         except Exception:
             urls = []
-            images = []
         
-        # Build images context for the AI
+        # No external image embedding to avoid broken/hotlinked images
         images_context = ""
-        if images:
-            images_context = "\nIMAGE SUGGESTIONS (Embed these naturally using `![](IMAGE_URL)`):\n"
-            for i, img_url in enumerate(images):
-                images_context += f"- Image {i+1}: {img_url}\n"
 
         # SEO phase - Focus on natural keyword integration
-        seo_sys = """You are a modern SEO specialist (2026 standards). 
-        Identify 3-5 PRIMARY keywords that are closely related and natural.
+        seo_sys = """You are a modern SEO specialist (2026 standards).
+        Identify a total of 4-5 keywords that are closely related and natural.
         Avoid keyword stuffing - focus on semantic relevance and user intent.
         Return JSON with:
         - 'primary_keyword': The main focus keyword (1-3 words)
-        - 'related_keywords': 2-4 closely related semantic variations
-        - 'lsi_keywords': 3-5 Latent Semantic Indexing terms (natural synonyms)
-        
+        - 'keywords': A list of 4-5 total keywords including the primary keyword
+
         Modern SEO prioritizes:
         1. Natural language and readability
         2. Semantic relevance over exact matches
@@ -313,9 +311,22 @@ class FinolAutomation:
         if isinstance(seo_data, dict) and "error" in seo_data:
             seo_data = {
                 "primary_keyword": topic,
-                "related_keywords": [audience],
-                "lsi_keywords": ["solutions", "strategies", "benefits"]
+                "keywords": [topic, audience, "solutions", "strategies", "benefits"]
             }
+        elif isinstance(seo_data, dict):
+            primary = seo_data.get("primary_keyword", topic)
+            raw_keywords = seo_data.get("keywords", [])
+            if not isinstance(raw_keywords, list):
+                raw_keywords = [str(raw_keywords)]
+            # Ensure primary keyword is first and keep 4-5 total unique keywords.
+            keywords = [primary] + [k for k in raw_keywords if isinstance(k, str)]
+            deduped = []
+            for k in keywords:
+                k = k.strip()
+                if k and k.lower() not in {d.lower() for d in deduped}:
+                    deduped.append(k)
+            seo_data["primary_keyword"] = primary
+            seo_data["keywords"] = deduped[:5]
 
         # Outline phase - Natural structure
         map_sys = """You are a content strategist creating a natural, engaging blog outline.
@@ -386,17 +397,10 @@ CRITICAL: ANTI-AI DETECTION RULES:
 - BE specific: use real Ahmedabad references where relevant (since the context is often Ahmedabad).
 
 {links_context}
-{images_context}
-
-FORMATTING REQUIREMENTS (IMAGES):
-- Use `![](IMAGE_URL)` for images
-- Every image MUST include descriptive ALT text for SEO: `![Descriptive Alt Text](IMAGE_URL)`
-- Insert images ONLY where they provide visual value to the content
 
 KEYWORD USAGE GUIDELINES:
-- Primary keyword: Use 2-3 times naturally in the entire section
-- Related keywords: Sprinkle 1-2 times if they fit naturally
-- LSI keywords: Use freely as they're natural synonyms
+- Use only the 4-5 provided keywords
+- Each keyword should appear at most 1-2 times in the entire section
 - NEVER start multiple paragraphs with the same keyword phrase
 - NEVER repeat exact keyword phrases back-to-back
 
@@ -409,6 +413,8 @@ WRITING STYLE:
 
 INCLUDE NATURALLY (not forced):
 - Contact: +919879972778 or +919925822542 (mention once, contextually)
+- When you mention a phone number, format it as a clickable link: `[+919879972778](tel:+919879972778)`
+- Any internal page mention must be a markdown link (e.g., `[Services](https://example.com/services)`).
 
 Return JSON with 'section_markdown' field containing well-written content.
 
@@ -431,8 +437,7 @@ Section Focus: {section_focus}
 
 SEO Keywords (use naturally, don't force):
 - Primary: {seo_data.get('primary_keyword', topic)}
-- Related: {', '.join(seo_data.get('related_keywords', [])[:3])}
-- LSI: {', '.join(seo_data.get('lsi_keywords', [])[:5])}
+- Keywords (total 4-5): {', '.join(seo_data.get('keywords', [])[:5])}
 
 Context: {topic} for {audience}
 Goal: {goal}
@@ -440,6 +445,7 @@ Goal: {goal}
 Previous content (for context, don't repeat): {blog_content[-300:] if blog_content else 'This is the first section'}
 
 Write engaging, natural content that provides real value. Avoid keyword stuffing.
+For this section, use only 1-2 of the provided keywords that fit best, and avoid repeating the same keyword-heavy phrasing from earlier sections.
 """
             
             try:
@@ -465,4 +471,49 @@ Write engaging, natural content that provides real value. Avoid keyword stuffing
                 # If section writing fails, add a placeholder
                 blog_content += f"\n\n## {section_title}\n\n[Content generation failed for this section: {str(e)}]"
             
+        blog_content = self._auto_link_urls(blog_content)
+        blog_content = self._auto_link_phone_numbers(blog_content)
         return self.humanize_and_sanitize(blog_content)
+
+    def _auto_link_urls(self, text: str) -> str:
+        """Convert bare URLs to markdown links when not already linked."""
+        if not text:
+            return text
+
+        import re
+
+        def replacer(match: re.Match) -> str:
+            url = match.group(0)
+            start = match.start()
+            # Avoid converting URLs already in markdown links or images.
+            if start >= 2 and text[start - 2:start] == "](":
+                return url
+            if start >= 4 and text[start - 4:start] == "![](":
+                return url
+            return f"[{url}]({url})"
+
+        pattern = re.compile(r"https?://[^\s)\]]+")
+        return pattern.sub(replacer, text)
+
+    def _auto_link_phone_numbers(self, text: str) -> str:
+        """Ensure phone numbers are clickable."""
+        if not text:
+            return text
+        import re
+
+        numbers = ["+919879972778", "+919925822542"]
+        pattern = re.compile("|".join(re.escape(n) for n in numbers))
+
+        def replacer(match: re.Match) -> str:
+            number = match.group(0)
+            start = match.start()
+            # Skip if already part of a tel: link or markdown link.
+            if start >= 4 and text[start - 4:start] == "tel:":
+                return number
+            if start >= 2 and text[start - 2:start] == "](":
+                return number
+            if start >= 1 and text[start - 1:start] == "[":
+                return number
+            return f"[{number}](tel:{number})"
+
+        return pattern.sub(replacer, text)

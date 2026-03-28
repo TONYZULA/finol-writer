@@ -99,36 +99,15 @@ def show_provider_selector(default_model: str = None):
     """Display provider and model selector."""
     st.subheader("🤖 AI Provider & Model Selection")
     
-    # Provider selection
-    provider = st.radio(
-        "Select Provider",
-        ["Gemini (Google)", "OpenRouter", "Bytez"],
-        horizontal=True,
-    )
-    
-    # Model selection based on provider
-    if provider == "Gemini (Google)":
-        models = [
-            "google/gemini-2.5-pro",
-            "google/gemini-2.5-flash",
-            "google/gemini-2.5-flash-lite",
-        ]
-    elif provider == "OpenRouter":
-        models = [
-            "openrouter/google/gemma-3-4b-it:free",
-            "openrouter/google/gemma-3-12b-it:free",
-            "openrouter/meta-llama/llama-3.2-3b-instruct:free",
-            "openrouter/mistralai/mistral-small-3.1-24b-instruct:free",
-            "openrouter/nousresearch/hermes-3-llama-3.1-405b:free",
-        ]
-    else:  # Bytez
-        models = [
-            "google/gemini-2.5-flash",
-            "openai/gpt-4o-mini",
-            "anthropic/claude-sonnet-4-5",
-            "Qwen/Qwen3-4B",
-            "meta-llama/Llama-2-7b-chat-hf",
-        ]
+    models = [
+        "google/gemini-2.5-pro",
+        "google/gemini-2.5-flash",
+        "google/gemini-2.5-flash-lite",
+        "openai/gpt-4o-mini",
+        "anthropic/claude-sonnet-4-5",
+        "Qwen/Qwen3-4B",
+        "meta-llama/Llama-2-7b-chat-hf",
+    ]
     
     selected_model = st.selectbox(
         "Select Model",
@@ -143,32 +122,25 @@ def show_fallback_info():
     """Display information about the fallback system."""
     with st.expander("ℹ️ About Fallback System"):
         st.markdown("""
-        ### Intelligent Multi-Provider Fallback
-        
-        This system automatically switches between AI providers when one fails:
-        
-        **Providers (in fallback order):**
-        1. **Gemini** - Google's direct API
-        2. **OpenRouter** - Aggregator with 30+ free models
-        3. **Bytez** - Free tier with 70+ models
-        
-        **What triggers fallback:**
+        ### Bytez-Only Provider
+
+        The app is configured to use Bytez exclusively (no Gemini/OpenRouter).
+
+        **What triggers retries:**
         - API connection errors
         - Rate limit exceeded
         - Request timeouts
         - Authentication failures
-        
+
         **Retry strategy:**
         - Exponential backoff: 2s → 4s → 8s (max 10s)
-        - Automatic model normalization for each provider
-        - JSON mode fallback if model doesn't support it
-        
+        - JSON mode fallback if a model doesn't support it
+
         **Benefits:**
-        - ✅ Seamless workflow continuity
-        - ✅ No manual intervention needed
-        - ✅ Automatic provider health tracking
-        - ✅ Cost optimization (free tier models available)
-        
+        - ✅ Simpler setup (single provider)
+        - ✅ No cross-provider failures
+        - ✅ Provider health tracking
+
         See `PROVIDER_SETUP.md` for detailed configuration.
         """)
 
