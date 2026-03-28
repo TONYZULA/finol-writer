@@ -43,7 +43,7 @@ with st.sidebar:
     st.subheader("Default Cover Image")
     cover_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "cover.png")
     if os.path.exists(cover_path):
-        st.image(cover_path, caption="Default cover used for every post", use_container_width=True)
+        st.image(cover_path, caption="Default cover used for every post", use_column_width=True)
     else:
         st.warning("Default cover image not found at assets/cover.png")
 
