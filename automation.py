@@ -56,6 +56,25 @@ class FinolAutomation:
             pass
         return []
 
+    def humanize_and_sanitize(self, text):
+        """Remove invisible characters and potential AI-watermark patterns."""
+        if not text:
+            return ""
+        
+        # 1. Remove Zero-Width Spaces and invisible control characters (often used as AI signatures)
+        invisible_chars = [
+            '\u200b', '\u200c', '\u200d', '\ufeff', # Zero-width
+            '\u00ad', # Soft hyphen
+            '\u2028', '\u2029', # Line/Paragraph separators
+        ]
+        sanitized = text
+        for char in invisible_chars:
+            sanitized = sanitized.replace(char, '')
+            
+        # 2. Basic 'Humanizer' - vary common AI repetitive structures
+        # (This is handled primarily via the refined prompt, but we ensure clean ASCII/UTF-8 here)
+        return sanitized.strip()
+
     def ai_call(self, system_prompt, user_prompt, json_mode=True):
         """
         Make AI call with automatic multi-provider fallback.
@@ -257,11 +276,22 @@ class FinolAutomation:
             for link in all_suggestions:
                 links_context += f"- {link.get('title')}: {link.get('url')}\n"
 
-        # Research phase
-        res_sys = "Search and prep exactly 5 real article URLs... Return JSON url-1 through url-5."
-        search_res = self.tavily.search(query=f"{topic} {audience}")
-        urls = [r['url'] for r in search_res['results'][:5]]
+        # Research phase - Articles and Images
+        try:
+            search_res = self.tavily.search(query=f"{topic} {audience}", search_depth="advanced", include_images=True)
+            urls = [r['url'] for r in search_res.get('results', [])[:5]]
+            images = [img['url'] for img in search_res.get('images', [])[:5]]
+        except Exception:
+            urls = []
+            images = []
         
+        # Build images context for the AI
+        images_context = ""
+        if images:
+            images_context = "\nIMAGE SUGGESTIONS (Embed these naturally using `![](IMAGE_URL)`):\n"
+            for i, img_url in enumerate(images):
+                images_context += f"- Image {i+1}: {img_url}\n"
+
         # SEO phase - Focus on natural keyword integration
         seo_sys = """You are a modern SEO specialist (2026 standards). 
         Identify 3-5 PRIMARY keywords that are closely related and natural.
@@ -347,11 +377,21 @@ FORMATTING REQUIREMENTS:
 CRITICAL RULES FOR MODERN SEO (2026):
 1. Write for HUMANS first, search engines second
 2. Use keywords NATURALLY - never force them
-3. Vary your language - use synonyms and semantic variations
-4. Focus on providing VALUE and answering user intent
-5. Avoid repetitive phrases and keyword stuffing
-6. Write conversationally and authentically
+CRITICAL: ANTI-AI DETECTION RULES:
+- NEVER use generic AI opening phrases: "In the digital age", "In today's fast-paced world", "Are you looking to unlock...", "Discover the secret...", "The landscape of..."
+- VARY sentence lengths: some short, some long. Use contractions (it's, can't, don't).
+- USE an active, personal voice. Talk to the reader as a expert mentor.
+- Avoid repetitive paragraph structures.
+- AVOID "Summary" or "Conclusion" headers that sound like an AI report—use natural headers like "What's Next?" or "Final Thoughts".
+- BE specific: use real Ahmedabad references where relevant (since the context is often Ahmedabad).
+
 {links_context}
+{images_context}
+
+FORMATTING REQUIREMENTS (IMAGES):
+- Use `![](IMAGE_URL)` for images
+- Every image MUST include descriptive ALT text for SEO: `![Descriptive Alt Text](IMAGE_URL)`
+- Insert images ONLY where they provide visual value to the content
 
 KEYWORD USAGE GUIDELINES:
 - Primary keyword: Use 2-3 times naturally in the entire section
@@ -425,4 +465,4 @@ Write engaging, natural content that provides real value. Avoid keyword stuffing
                 # If section writing fails, add a placeholder
                 blog_content += f"\n\n## {section_title}\n\n[Content generation failed for this section: {str(e)}]"
             
-        return blog_content
+        return self.humanize_and_sanitize(blog_content)
