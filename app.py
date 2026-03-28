@@ -107,8 +107,9 @@ with tab1:
                 st.session_state.agent = agent
                 with st.spinner("Uploading Media & Post..."):
                     try:
-                        # Upload to WordPress (without cover image)
-                        link = agent.upload_to_wordpress(topic, edited_text, None, wp_config)
+                        # Upload to WordPress with hardcoded cover image
+                        img = agent.get_default_cover_image_bytes()
+                        link = agent.upload_to_wordpress(topic, edited_text, img, wp_config)
                         st.success(f"Published successfully! [View Post]({link})")
                             
                     except Exception as e:

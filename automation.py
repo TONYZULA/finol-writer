@@ -13,7 +13,6 @@ class FinolAutomation:
         # Safe loading from st.secrets to prevent blank screen crashes
         self.keys = {
             "TAVILY_API_KEY": st.secrets.get("TAVILY_API_KEY", ""),
-            "TEMPLATED_API_KEY": st.secrets.get("TEMPLATED_API_KEY", ""),
             "BYTEZ_API_KEY": st.secrets.get("BYTEZ_API_KEY", ""),
         }
         
@@ -113,24 +112,16 @@ class FinolAutomation:
             # This prevents KeyError when accessing expected fields
             return {"error": "Failed to parse JSON", "raw_content": str(text)}
 
-    def generate_cover_image(self, topic):
-        if not self.keys.get("TEMPLATED_API_KEY"):
+    def get_default_cover_image_bytes(self):
+        """Load the hardcoded cover image from the repo."""
+        import os
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        image_path = os.path.join(base_dir, "assets", "cover.png")
+        if not os.path.exists(image_path):
+            st.warning("Cover image not found at assets/cover.png. Publishing without featured image.")
             return None
-        url = "https://api.templated.io/v1/render"
-        headers = {"Authorization": f"Bearer {self.keys['TEMPLATED_API_KEY']}"}
-        payload = {
-            "template": "d5222a01-a53b-4683-90af-20cd248ebd5f",
-            "format": "jpg",
-            "layers": {"text-4": {"text": topic}}
-        }
-        res = requests.post(url, json=payload, headers=headers).json()
-        render_url = res.get("render_url")
-        if not render_url:
-            return None
-        img_res = requests.get(render_url, timeout=30)
-        if img_res.status_code != 200:
-            return None
-        return img_res.content
+        with open(image_path, "rb") as f:
+            return f.read()
 
     def upload_to_wordpress(self, title, content, image_bytes, wp_config):
         """Upload blog post with cover image to WordPress."""
