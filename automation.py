@@ -2,6 +2,7 @@ import os
 import json
 import requests
 import streamlit as st
+import markdown
 from tavily import TavilyClient
 from provider_manager import ProviderManager
 
@@ -30,6 +31,30 @@ class FinolAutomation:
             self.tavily = None
         else:
             self.tavily = TavilyClient(api_key=self.keys["TAVILY_API_KEY"])
+
+    def fetch_internal_links(self, wp_url):
+        """Fetch existing posts to use as internal linking suggestions."""
+        try:
+            # Standardize URL
+            clean_url = str(wp_url).strip().rstrip('/')
+            if clean_url.startswith("http://"):
+                clean_url = clean_url.replace("http://", "https://", 1)
+            
+            # Fetch latest 10 posts
+            posts_url = f"{clean_url}/wp-json/wp/v2/posts?per_page=10&status=publish"
+            res = requests.get(posts_url, timeout=10)
+            if res.status_code == 200:
+                posts = res.json()
+                links = []
+                for p in posts:
+                    title = p.get('title', {}).get('rendered', '')
+                    link = p.get('link', '')
+                    if title and link:
+                        links.append({"title": title, "url": link})
+                return links
+        except Exception:
+            pass
+        return []
 
     def ai_call(self, system_prompt, user_prompt, json_mode=True):
         """
@@ -143,11 +168,15 @@ class FinolAutomation:
         else:
             st.info("No cover image provided. Publishing without featured image.")
         
-        # Create post
+        # Convert Markdown to HTML for WordPress
+        # uses extensions for better tables, fenced code blocks, etc.
+        html_content = markdown.markdown(content, extensions=['fenced_code', 'tables', 'nl2br', 'sane_lists'])
+        
+        # Create post with HTML content
         post_url = f"{base_url}/wp-json/wp/v2/posts"
         payload = {
             "title": title,
-            "content": content,
+            "content": html_content,
             "status": "publish"
         }
         
@@ -210,10 +239,24 @@ class FinolAutomation:
             else:
                 raise Exception(f"WordPress publishing failed: {error_msg}")
 
-    def run_writing_pipeline(self, topic, audience, goal, word_target):
+    def run_writing_pipeline(self, topic, audience, goal, word_target, wp_config=None, knowledge_base=None):
         if not self.tavily:
             return "Error: Research tool not initialized."
         
+        # Fetch internal links if WordPress config is available
+        internal_links = []
+        if wp_config and wp_config.get('url'):
+            with st.spinner("Fetching internal links for suggestions..."):
+                internal_links = self.fetch_internal_links(wp_config['url'])
+        
+        # Merge with manual knowledge base links
+        all_suggestions = (knowledge_base or []) + internal_links
+        links_context = ""
+        if all_suggestions:
+            links_context = "\nINTERNAL LINKING SUGGESTIONS (Link to these naturally if relevant):\n"
+            for link in all_suggestions:
+                links_context += f"- {link.get('title')}: {link.get('url')}\n"
+
         # Research phase
         res_sys = "Search and prep exactly 5 real article URLs... Return JSON url-1 through url-5."
         search_res = self.tavily.search(query=f"{topic} {audience}")
@@ -293,7 +336,13 @@ class FinolAutomation:
 
         # Writing phase - Natural, engaging content
         blog_content = ""
-        writer_sys = """You are an expert content writer creating engaging, natural blog content.
+        writer_sys = f"""You are an expert content writer creating engaging, natural blog content.
+
+FORMATTING REQUIREMENTS:
+1. Use proper Markdown headings (##, ###) for structure
+2. Use **bold** for emphasis on key phrases
+3. Use bullet points for readability
+4. Use 2-3 sentence paragraphs for mobile readability
 
 CRITICAL RULES FOR MODERN SEO (2026):
 1. Write for HUMANS first, search engines second
@@ -302,6 +351,7 @@ CRITICAL RULES FOR MODERN SEO (2026):
 4. Focus on providing VALUE and answering user intent
 5. Avoid repetitive phrases and keyword stuffing
 6. Write conversationally and authentically
+{links_context}
 
 KEYWORD USAGE GUIDELINES:
 - Primary keyword: Use 2-3 times naturally in the entire section

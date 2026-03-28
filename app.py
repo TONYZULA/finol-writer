@@ -72,12 +72,34 @@ with tab1:
         goal = st.text_area("Goal")
         target = st.number_input("Word Target", value=1000)
         
+        # Knowledge Base for Internal Linking
+        knowledge_input = st.text_area(
+            "Knowledge Base / Core Links (Optional)", 
+            placeholder="Title: URL\nServices: https://pandavaz.com/services\nAbout: https://pandavaz.com/about",
+            help="Add links to your core pages (Services, Portfolio, etc.) so the AI can link to them naturally."
+        )
+        
+        # Parse knowledge base
+        knowledge_base = []
+        if knowledge_input:
+            lines = knowledge_input.split('\n')
+            for line in lines:
+                if ':' in line:
+                    parts = line.split(':', 1)
+                    knowledge_base.append({"title": parts[0].strip(), "url": parts[1].strip()})
+
         if st.button("Generate Draft"):
             agent = FinolAutomation(model)
             st.session_state.agent = agent
             with st.spinner("Writing..."):
                 try:
-                    st.session_state.draft = agent.run_writing_pipeline(topic, audience, goal, target)
+                    # Pass WP context for internal linking
+                    wp_context = {"url": wp_url.strip()} if wp_url else None
+                    st.session_state.draft = agent.run_writing_pipeline(
+                        topic, audience, goal, target, 
+                        wp_config=wp_context,
+                        knowledge_base=knowledge_base
+                    )
                     st.rerun()
                 except Exception as e:
                     st.error("Draft generation failed.")
