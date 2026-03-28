@@ -1,16 +1,15 @@
-# FINOL Blog Automation with Multi-Provider AI Fallback
+# FINOL Blog Automation (Bytez-Only)
 
-Intelligent WordPress blog automation system with automatic AI provider failover. Never let API failures interrupt your content creation workflow.
+Reliable WordPress blog automation using Bytez models with built-in retries and provider health tracking.
 
 ## 🚀 Features
 
-- **Intelligent Multi-Provider Fallback**: Automatically switches between Gemini, OpenRouter, and Bytez when one fails
-- **Seamless Workflow Continuity**: No manual intervention needed when providers fail
-- **Real-Time Provider Monitoring**: Track provider health, success rates, and call history
-- **70+ AI Models Available**: Access to OpenAI, Anthropic, Google, Meta, and open-source models
-- **WordPress Integration**: Direct publishing with cover image generation
+- **Bytez-Only AI**: Single-provider setup for stability
+- **Smart Retries**: Exponential backoff on transient failures
+- **Real-Time Monitoring**: Track provider health and call history
+- **70+ Models Available**: OpenAI, Anthropic, Google, Meta, and open-source models via Bytez
+- **WordPress Integration**: Direct publishing
 - **Research-Powered Content**: Uses Tavily for real-time web research
-- **Exponential Backoff**: Smart retry logic with automatic rate limit handling
 
 ## 📋 Table of Contents
 
@@ -42,13 +41,8 @@ Edit `.streamlit/secrets.toml` with your API keys:
 
 ```toml
 # Minimum configuration
-BYTEZ_API_KEY = "444d1ac0a8b038cbe61ff956a8cdd700"  # Free tier included
+BYTEZ_API_KEY = "your-bytez-key"  # Free tier available
 TAVILY_API_KEY = "your-tavily-key"
-TEMPLATED_API_KEY = "your-templated-key"
-
-# Optional (recommended for better fallback)
-GOOGLE_API_KEY = "your-google-key"
-OPENROUTER_API_KEY = "your-openrouter-key"
 ```
 
 ### 3. Test the System
@@ -63,25 +57,23 @@ python test_fallback.py
 streamlit run app.py
 ```
 
-Visit `http://localhost:8501` and start creating content!
+Visit `http://localhost:8501` and start creating content.
 
 ## 🔄 How It Works
 
-### Fallback Flow
+### Bytez Call Flow
 
 ```
 User Request
     ↓
-Try Preferred Provider (e.g., Gemini)
-    ↓ (fails)
-Wait 2s → Try OpenRouter
-    ↓ (fails)
-Wait 4s → Try Bytez
-    ↓ (succeeds)
+Bytez API Call
+    ↓ (transient failure)
+Retry with exponential backoff
+    ↓ (success)
 Return Response
 ```
 
-### What Triggers Fallback?
+### What Triggers Retries?
 
 - API connection errors
 - Rate limit exceeded
@@ -92,8 +84,7 @@ Return Response
 ### Automatic Handling
 
 - **Exponential Backoff**: 2s → 4s → 8s (capped at 10s)
-- **Model Normalization**: Adapts model names for each provider
-- **JSON Mode Fallback**: Retries without JSON if model doesn't support it
+- **JSON Mode Fallback**: Retries without JSON if a model doesn't support it
 - **Health Tracking**: Monitors provider failures and availability
 
 ## ⚙️ Configuration
@@ -102,37 +93,19 @@ Return Response
 
 | Provider | Required | Get Key | Free Tier |
 |----------|----------|---------|-----------|
-| Bytez | Recommended | [bytez.com/api](https://bytez.com/api) | ✅ 70+ models |
+| Bytez | Yes | [bytez.com/api](https://bytez.com/api) | ✅ 70+ models |
 | Tavily | Yes | [tavily.com](https://tavily.com) | ✅ 1000 searches/month |
-| Templated | Yes | [templated.io](https://templated.io) | ✅ Limited |
-| Google Gemini | Optional | [aistudio.google.com](https://aistudio.google.com/app/apikeys) | ✅ Generous |
-| OpenRouter | Optional | [openrouter.ai](https://openrouter.ai) | ✅ 30+ models |
 
 ### Environment Variables
 
 For non-Streamlit deployments:
 
 ```bash
-export GOOGLE_API_KEY="..."
-export OPENROUTER_API_KEY="..."
-export BYTEZ_API_KEY="444d1ac0a8b038cbe61ff956a8cdd700"
+export BYTEZ_API_KEY="..."
 export TAVILY_API_KEY="..."
-export TEMPLATED_API_KEY="..."
 ```
 
 ## 🤖 Available Models
-
-### Gemini (Google Direct API)
-- `google/gemini-2.5-pro` - Best quality, slower
-- `google/gemini-2.5-flash` - Fast, good quality
-- `google/gemini-2.5-flash-lite` - Fastest, basic quality
-
-### OpenRouter (30+ Free Models)
-- `openrouter/google/gemma-3-4b-it:free`
-- `openrouter/meta-llama/llama-3.2-3b-instruct:free`
-- `openrouter/mistralai/mistral-small-3.1-24b-instruct:free`
-- `openrouter/nousresearch/hermes-3-llama-3.1-405b:free`
-- And 25+ more...
 
 ### Bytez (70+ Free Models)
 - **OpenAI**: `openai/gpt-4o-mini`, `openai/gpt-3.5-turbo`
@@ -142,9 +115,9 @@ export TEMPLATED_API_KEY="..."
 - **Qwen**: `Qwen/Qwen3-4B`, `Qwen/Qwen2.5-3B-Instruct`
 - **DeepSeek**: `deepseek-ai/DeepSeek-R1-Distill-Qwen-7B`
 - **Mistral**: `mistralai/Mistral-7B-Instruct-v0.3`
-- And 60+ more...
+- And 60+ more
 
-See [Bytez Models Page](https://bytez.com/models?task=chat) for complete list.
+See [Bytez Models Page](https://bytez.com/models?task=chat) for the complete list.
 
 ## 📊 Monitoring
 
@@ -152,7 +125,7 @@ See [Bytez Models Page](https://bytez.com/models?task=chat) for complete list.
 
 The app includes a real-time monitoring dashboard:
 
-1. **Provider Monitor Tab**: View health status of all providers
+1. **Provider Monitor Tab**: View Bytez status
 2. **Call History**: See recent API calls and success rates
 3. **Debug Panel**: Detailed error logs and statistics
 
@@ -167,8 +140,6 @@ agent = FinolAutomation("google/gemini-2.5-flash")
 status = agent.provider_manager.get_provider_status()
 print(status)
 # {
-#   'gemini': {'available': True, 'failures': 0, 'last_error': None},
-#   'openrouter': {'available': True, 'failures': 2, 'last_error': 'Rate limit'},
 #   'bytez': {'available': True, 'failures': 0, 'last_error': None}
 # }
 
@@ -181,29 +152,28 @@ for call in history:
 ## 🔧 Troubleshooting
 
 ### "All AI providers failed"
-**Cause**: No providers configured or all failed  
-**Solution**: Configure at least one API key in `.streamlit/secrets.toml`
+**Cause**: Bytez API key not configured or unavailable
+**Solution**: Configure `BYTEZ_API_KEY` in `.streamlit/secrets.toml`
 
 ### "Missing TAVILY_API_KEY"
-**Cause**: Tavily API key not set  
+**Cause**: Tavily API key not set
 **Solution**: Add `TAVILY_API_KEY` to secrets (required for research)
 
 ### Slow Responses
-**Cause**: Rate limits or slow models  
-**Solution**: 
+**Cause**: Rate limits or slow models
+**Solution**:
 - Check Provider Monitor for rate limits
-- Use faster models (`gemini-2.5-flash` vs `gemini-2.5-pro`)
-- Bytez free tier may be slower but unlimited
+- Use faster models (`google/gemini-2.5-flash`)
 
 ### Provider Shows "Unavailable"
-**Cause**: Authentication failure  
+**Cause**: Authentication failure
 **Solution**:
 - Verify API key is correct
 - Check API key has quota remaining
 - Regenerate API key if needed
 
 ### JSON Parsing Errors
-**Cause**: Model doesn't support JSON mode  
+**Cause**: Model doesn't support JSON mode
 **Solution**: System automatically retries without JSON mode
 
 ## 🏗️ Architecture
@@ -213,7 +183,6 @@ for call in history:
 ```
 app.py
 ├── Streamlit UI
-├── Provider selection
 └── Monitoring dashboard
 
 automation.py
@@ -222,10 +191,9 @@ automation.py
 └── Uses ProviderManager
 
 provider_manager.py
-├── Multi-provider orchestration
-├── Fallback logic
-├── Health tracking
-└── API normalization
+├── Bytez orchestration
+├── Retry logic
+└── Health tracking
 
 provider_dashboard.py
 └── Monitoring UI components
@@ -235,21 +203,14 @@ provider_dashboard.py
 
 ```python
 ProviderManager
-    ├── Initialize providers (Gemini, OpenRouter, Bytez)
+    ├── Initialize provider (Bytez)
     ├── Track health status
     ├── ai_call()
-    │   ├── Try preferred provider
+    │   ├── Try Bytez
     │   ├── On failure: exponential backoff
-    │   ├── Try next provider
-    │   └── Return first success
+    │   └── Return on success
     └── Log call history
 ```
-
-### Key Classes
-
-- **ProviderConfig**: Configuration for each provider
-- **ProviderManager**: Orchestrates multi-provider calls
-- **FinolAutomation**: Main automation pipeline
 
 ## 📚 Documentation
 
@@ -266,13 +227,11 @@ ProviderManager
 
 ### WordPress Automation
 - Direct publishing
-- Cover image generation
 - Metadata optimization
 
 ### Reliable AI Access
-- Never blocked by single provider
-- Automatic cost optimization
-- Quality fallback options
+- Single provider stability
+- Predictable configuration
 
 ## 🔐 Security
 
@@ -305,16 +264,14 @@ streamlit run app.py --server.port 8501 --server.address 0.0.0.0
 
 ## 📈 Performance
 
-- **Fallback Time**: 2-10 seconds depending on failures
-- **Success Rate**: 99%+ with 3 providers configured
-- **Throughput**: Limited by provider rate limits
+- **Retry Time**: 2-10 seconds depending on failures
+- **Throughput**: Limited by Bytez rate limits
 - **Latency**: 1-5 seconds per API call
 
 ## 🤝 Contributing
 
 Contributions welcome! Areas for improvement:
 
-- Additional provider integrations
 - Custom retry strategies
 - Advanced monitoring features
 - Performance optimizations
@@ -326,17 +283,13 @@ MIT License - feel free to use in your projects
 ## 🙏 Acknowledgments
 
 - **Bytez** for free tier API access
-- **OpenRouter** for model aggregation
-- **Google** for Gemini API
 - **Tavily** for research capabilities
 
 ## 📞 Support
 
 - **Issues**: Open a GitHub issue
 - **Bytez Support**: [docs.bytez.com](https://docs.bytez.com)
-- **OpenRouter Support**: [openrouter.ai/docs](https://openrouter.ai/docs)
-- **Gemini Support**: [ai.google.dev/docs](https://ai.google.dev/docs)
 
 ---
 
-**Built with ❤️ for reliable AI-powered content creation**
+**Built for reliable AI-powered content creation**
