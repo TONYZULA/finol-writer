@@ -93,6 +93,11 @@ class FinolAutomation:
         password = str(wp_config.get('pass', '')).strip()
         url = str(wp_config.get('url', '')).strip().rstrip('/')
         
+        # Force HTTPS for security and to prevent auth loss during redirects
+        if url.startswith("http://"):
+            url = url.replace("http://", "https://", 1)
+            st.warning("⚠️ Upgraded WordPress URL to HTTPS to ensure secure authentication.")
+        
         auth = (user, password)
         base_url = url
         
@@ -117,23 +122,19 @@ class FinolAutomation:
                     data=image_bytes, 
                     headers=headers, 
                     auth=auth,
-                    timeout=30
+                    timeout=30,
+                    allow_redirects=False # Prevent auth leak
                 )
                 
-                # Check if response is successful
-                if media_response.status_code not in [200, 201]:
+                # Check for success (201 Created)
+                if media_response.status_code == 201:
+                    media_res = media_response.json()
+                    media_id = media_res.get("id")
+                    if media_id:
+                        st.success(f"✅ Featured image uploaded successfully!")
+                else:
                     st.warning(f"Media upload returned {media_response.status_code}. Continuing without featured image.")
                     media_id = None
-                else:
-                    # Try to parse JSON
-                    try:
-                        media_res = media_response.json()
-                        media_id = media_res.get("id")
-                        if media_id:
-                            st.success(f"✅ Featured image uploaded successfully!")
-                    except:
-                        # If JSON parsing fails, try to continue without featured image
-                        media_id = None
                     
             except Exception as e:
                 # If media upload fails, continue without featured image
@@ -162,35 +163,38 @@ class FinolAutomation:
                 post_url, 
                 json=payload, 
                 auth=auth,
-                timeout=30
+                timeout=30,
+                allow_redirects=False # Prevent auth leak and silent GET conversion
             )
             
-            # Check if response is successful
-            if post_response.status_code == 404:
-                # Try alternative URL format (some WordPress setups)
-                alt_post_url = f"{base_url}/index.php/wp-json/wp/v2/posts"
-                st.info(f"Trying alternative URL: {alt_post_url}")
-                
-                post_response = requests.post(
-                    alt_post_url,
-                    json=payload,
-                    auth=auth,
-                    timeout=30
-                )
-            
-            if post_response.status_code not in [200, 201]:
-                error_detail = post_response.text[:500]
-                raise Exception(f"Post creation failed: {post_response.status_code} - {error_detail}")
-            
-            # Try to parse JSON
-            try:
+            # Check if response is successful (201 Created)
+            if post_response.status_code == 201:
                 post_res = post_response.json()
                 return post_res.get("link", f"{base_url}/?p={post_res.get('id', 'unknown')}")
-            except:
-                # If JSON parsing fails but post was created, return base URL
-                if post_response.status_code in [200, 201]:
+            
+            # Handle 3xx Redirects
+            if 300 <= post_response.status_code < 400:
+                location = post_response.headers.get("Location", "unknown")
+                raise Exception(
+                    f"WordPress redirected the request to: {location}\n"
+                    f"This usually happens when using HTTP instead of HTTPS. "
+                    f"Please ensure your WordPress URL in settings starts with 'https://'."
+                )
+
+            # Some WordPress setups return 200 for posts created via plugins
+            if post_response.status_code == 200:
+                try:
+                    post_res = post_response.json()
+                    # If it's a list, it's a GET response (failure)
+                    if isinstance(post_res, list):
+                        raise Exception("Received a list of posts instead of a single created post. Check if your URL redirected to a GET request.")
+                    return post_res.get("link", f"{base_url}/wp-admin/edit.php")
+                except:
                     return f"{base_url}/wp-admin/edit.php"
-                raise Exception("Failed to parse WordPress response")
+            
+            # Handle errors
+            error_detail = post_response.text[:500]
+            raise Exception(f"Post creation failed: {post_response.status_code} - {error_detail}")
                 
         except Exception as e:
             # Provide helpful error message based on error type
