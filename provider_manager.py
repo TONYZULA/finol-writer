@@ -116,34 +116,44 @@ class ProviderManager:
             Normalized model name for the provider
         """
         if provider == "bytez":
-            # Bytez accepts direct model identifiers; keep as-is when provided.
-            # Fallback to a safe default if the model is missing.
+            # Default to a reliable open-source model that works with Bytez key only.
+            # Closed-source models (google/, openai/, etc.) need an extra provider-key header.
             if not model or model == "default":
-                return "google/gemini-2.5-flash"
+                return "meta-llama/Meta-Llama-3.1-8B-Instruct"
             return model
         
         return model
     
-    # Fallback model ladder tried in order when the primary model 500s
+    # Open-source fallback ladder — these work with a Bytez key only (no provider key needed).
+    # Closed-source models (google/, openai/, anthropic/) require an additional provider-key header
+    # which we don't manage here, so keep this list open-source only.
     BYTEZ_FALLBACK_MODELS = [
-        "google/gemini-2.5-flash",
-        "google/gemini-2.0-flash",
-        "meta-llama/Llama-3.1-8B-Instruct",
+        "meta-llama/Meta-Llama-3.1-8B-Instruct",
+        "mistralai/Mistral-7B-Instruct-v0.3",
+        "microsoft/Phi-3-mini-4k-instruct",
     ]
 
     def _call_bytez_api(self, model: str, messages: List[Dict],
-                        json_mode: bool = True, timeout: int = 60) -> str:
+                        json_mode: bool = True, timeout: int = 120) -> str:
         """
-        Direct call to Bytez API with per-model retry and fallback ladder.
+        Direct call to the native Bytez API.
 
-        On 5xx errors the method retries up to 2 times with exponential
-        back-off, then moves to the next model in BYTEZ_FALLBACK_MODELS.
-        4xx errors are re-raised immediately (caller handles auth/rate).
+        Bytez endpoint format:
+            POST https://api.bytez.com/models/v2/{org}/{model-name}
+        Auth:
+            Authorization: {api_key}   (no 'Bearer' prefix)
+        Payload:
+            { "messages": [...], "stream": false }
+        Response:
+            { "output": "...", ... }   (NOT OpenAI choices format)
+
+        On 4xx errors raises immediately. On 5xx retries up to 2 times
+        with backoff, then moves to the next model in BYTEZ_FALLBACK_MODELS.
 
         Args:
-            model: Bytez model identifier
+            model: Bytez model identifier in 'org/model-name' format
             messages: Message list for the API
-            json_mode: Whether to request JSON response
+            json_mode: Unused (kept for interface compatibility)
             timeout: Request timeout in seconds
 
         Returns:
@@ -152,12 +162,13 @@ class ProviderManager:
         from requests.exceptions import HTTPError as RequestsHTTPError
 
         api_key = self.secrets.get("BYTEZ_API_KEY", "")
+        # Bytez uses plain key — no 'Bearer' prefix
         headers = {
-            "Authorization": f"Bearer {api_key}",
+            "Authorization": api_key,
             "Content-Type": "application/json",
         }
 
-        # Build model ladder: requested model first, then fallbacks (deduped)
+        # Build model ladder: requested model first, then open-source fallbacks (deduped)
         seen = set()
         ladder = []
         for m in [model] + self.BYTEZ_FALLBACK_MODELS:
@@ -167,35 +178,48 @@ class ProviderManager:
 
         last_exc = None
         for attempt_model in ladder:
+            # Bytez native endpoint: split 'org/model-name' into URL segments
+            # e.g. 'meta-llama/Meta-Llama-3.1-8B-Instruct'
+            #   -> https://api.bytez.com/models/v2/meta-llama/Meta-Llama-3.1-8B-Instruct
+            url = f"https://api.bytez.com/models/v2/{attempt_model}"
             payload = {
-                "model": attempt_model,
                 "messages": messages,
                 "stream": False,
             }
+
             for attempt in range(3):  # up to 3 tries per model
                 try:
                     response = requests.post(
-                        "https://api.bytez.com/models/v2/openai/v1/chat/completions",
+                        url,
                         json=payload,
                         headers=headers,
                         timeout=timeout,
                     )
                     response.raise_for_status()
-                    return response.json()["choices"][0]["message"]["content"]
+                    data = response.json()
+                    # Native Bytez response uses 'output', not OpenAI 'choices'
+                    if "output" in data:
+                        return data["output"]
+                    # Fallback: try OpenAI-style response just in case
+                    if "choices" in data:
+                        return data["choices"][0]["message"]["content"]
+                    # Last resort: return full JSON as string
+                    return json.dumps(data)
                 except RequestsHTTPError as e:
                     status = e.response.status_code if e.response is not None else 0
                     if status < 500:
-                        # 4xx — no point retrying; propagate immediately
-                        raise
-                    # 5xx — wait and retry (or move to next model)
+                        # 4xx — no point retrying this model
+                        last_exc = e
+                        break
+                    # 5xx — transient server error, retry with backoff
                     last_exc = e
                     if attempt < 2:
-                        time.sleep(2 ** attempt)  # 1s, 2s
+                        time.sleep(2 ** attempt)  # 1s then 2s
                     else:
                         break  # exhausted retries for this model
                 except Exception as e:
                     last_exc = e
-                    raise  # non-HTTP errors propagate immediately
+                    raise  # non-HTTP errors (network, JSON parse) propagate immediately
 
         # All models and retries exhausted
         raise last_exc
