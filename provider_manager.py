@@ -17,6 +17,7 @@ from litellm.exceptions import (
     RateLimitError,
     APIError,
 )
+from requests.exceptions import HTTPError as RequestsHTTPError, RequestException
 
 
 class ProviderConfig:
@@ -123,39 +124,81 @@ class ProviderManager:
         
         return model
     
-    def _call_bytez_api(self, model: str, messages: List[Dict], 
-                       json_mode: bool = True, timeout: int = 60) -> str:
+    # Fallback model ladder tried in order when the primary model 500s
+    BYTEZ_FALLBACK_MODELS = [
+        "google/gemini-2.5-flash",
+        "google/gemini-2.0-flash",
+        "meta-llama/Llama-3.1-8B-Instruct",
+    ]
+
+    def _call_bytez_api(self, model: str, messages: List[Dict],
+                        json_mode: bool = True, timeout: int = 60) -> str:
         """
-        Direct call to Bytez API (not through LiteLLM).
-        
+        Direct call to Bytez API with per-model retry and fallback ladder.
+
+        On 5xx errors the method retries up to 2 times with exponential
+        back-off, then moves to the next model in BYTEZ_FALLBACK_MODELS.
+        4xx errors are re-raised immediately (caller handles auth/rate).
+
         Args:
             model: Bytez model identifier
             messages: Message list for the API
             json_mode: Whether to request JSON response
             timeout: Request timeout in seconds
-            
+
         Returns:
             Response content string
         """
+        from requests.exceptions import HTTPError as RequestsHTTPError
+
         api_key = self.secrets.get("BYTEZ_API_KEY", "")
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
-        payload = {
-            "model": model,
-            "messages": messages,
-            "stream": False,
-        }
-        
-        response = requests.post(
-            "https://api.bytez.com/v1/chat/completions",
-            json=payload,
-            headers=headers,
-            timeout=timeout,
-        )
-        response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"]
+
+        # Build model ladder: requested model first, then fallbacks (deduped)
+        seen = set()
+        ladder = []
+        for m in [model] + self.BYTEZ_FALLBACK_MODELS:
+            if m and m not in seen:
+                seen.add(m)
+                ladder.append(m)
+
+        last_exc = None
+        for attempt_model in ladder:
+            payload = {
+                "model": attempt_model,
+                "messages": messages,
+                "stream": False,
+            }
+            for attempt in range(3):  # up to 3 tries per model
+                try:
+                    response = requests.post(
+                        "https://api.bytez.com/v1/chat/completions",
+                        json=payload,
+                        headers=headers,
+                        timeout=timeout,
+                    )
+                    response.raise_for_status()
+                    return response.json()["choices"][0]["message"]["content"]
+                except RequestsHTTPError as e:
+                    status = e.response.status_code if e.response is not None else 0
+                    if status < 500:
+                        # 4xx — no point retrying; propagate immediately
+                        raise
+                    # 5xx — wait and retry (or move to next model)
+                    last_exc = e
+                    if attempt < 2:
+                        time.sleep(2 ** attempt)  # 1s, 2s
+                    else:
+                        break  # exhausted retries for this model
+                except Exception as e:
+                    last_exc = e
+                    raise  # non-HTTP errors propagate immediately
+
+        # All models and retries exhausted
+        raise last_exc
     
     def ai_call(self, system_prompt: str, user_prompt: str, 
                 preferred_model: str = None, json_mode: bool = True) -> str:
@@ -248,6 +291,59 @@ class ProviderManager:
                     wait_time = self.retry_backoff_base ** len(failed_providers)
                     time.sleep(min(wait_time, 10))  # Cap at 10 seconds
                 
+                continue
+            
+            except RequestsHTTPError as e:
+                # Raised by response.raise_for_status() in _call_bytez_api
+                status_code = e.response.status_code if e.response is not None else 0
+                error_msg = f"HTTP {status_code}: {str(e)}"
+                
+                if status_code in (401, 403):
+                    # Auth failure — disable provider
+                    provider.is_available = False
+                    provider.last_error = f"Auth failed: {error_msg}"
+                    provider.last_error_time = time.time()
+                    self.call_history.append({
+                        "provider": provider.name,
+                        "status": "auth_failed",
+                        "error": error_msg,
+                        "timestamp": time.time(),
+                    })
+                else:
+                    # Rate limit or server error — retry with backoff
+                    provider.failure_count += 1
+                    provider.last_error = error_msg
+                    provider.last_error_time = time.time()
+                    failed_providers.append(provider.name)
+                    last_error = e
+                    self.call_history.append({
+                        "provider": provider.name,
+                        "status": "failed",
+                        "error": error_msg,
+                        "timestamp": time.time(),
+                    })
+                    if provider != providers_to_try[-1]:
+                        wait_time = self.retry_backoff_base ** len(failed_providers)
+                        time.sleep(min(wait_time, 10))
+                
+                continue
+            
+            except RequestException as e:
+                # Network-level errors (timeout, connection refused, etc.)
+                provider.failure_count += 1
+                provider.last_error = f"Network error: {str(e)}"
+                provider.last_error_time = time.time()
+                failed_providers.append(provider.name)
+                last_error = e
+                self.call_history.append({
+                    "provider": provider.name,
+                    "status": "failed",
+                    "error": str(e),
+                    "timestamp": time.time(),
+                })
+                if provider != providers_to_try[-1]:
+                    wait_time = self.retry_backoff_base ** len(failed_providers)
+                    time.sleep(min(wait_time, 10))
                 continue
             
             except AuthenticationError as e:
