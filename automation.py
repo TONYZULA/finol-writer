@@ -265,12 +265,27 @@ class FinolAutomation:
         all_suggestions = (knowledge_base or []) + internal_links
         links_context = ""
         if all_suggestions:
-            links_context = "\nINTERNAL LINKING SUGGESTIONS (use markdown links):\n"
+            links_context = (
+                "\n\n=== MANDATORY INTERNAL LINKING RULES ===\n"
+                "You MUST embed the following pillar/internal links naturally into the blog content.\n"
+                "CRITICAL: Use the EXACT anchor text shown below — word for word. "
+                "Do NOT paraphrase, shorten, or reword the anchor text.\n"
+                "Each link should appear ONCE, placed where it reads naturally in a sentence.\n\n"
+                "Anchor Text → URL (copy the markdown link exactly as shown):\n"
+            )
             for link in all_suggestions:
-                title = link.get('title')
-                url = link.get('url')
-                if title and url:
-                    links_context += f"- [{title}]({url})\n"
+                anchor = link.get('title', '').strip()
+                url = link.get('url', '').strip()
+                if anchor and url:
+                    links_context += f'  • [{anchor}]({url})\n'
+            links_context += (
+                "\nExample of CORRECT usage:\n"
+                '  ✅ "...which is why choosing the [best branding agency in Ahmedabad]'
+                '(https://pandavaz.com/best-branding-agency-in-ahmedabad/) matters so much."\n'
+                "Example of WRONG usage (anchor text changed — NOT allowed):\n"
+                '  ❌ "...choosing the [top agency in Ahmedabad](https://pandavaz.com/...) matters."\n'
+                "=== END INTERNAL LINKING RULES ===\n\n"
+            )
 
         # Research phase - Articles
         try:
@@ -370,51 +385,16 @@ class FinolAutomation:
         blog_content = ""
         writer_sys = f"""You are an expert content writer creating engaging, natural blog content.
 
-FORMATTING REQUIREMENTS:
-1. Use proper Markdown headings (##, ###) for structure
-2. Use **bold** for emphasis on key phrases
-3. Use bullet points for readability
-4. Use 2-3 sentence paragraphs for mobile readability
+WRITING PRINCIPLES:
+1. Write for HUMANS first. Use an active, personal, and mentored voice.
+2. VARY sentence lengths. Use contractions (it's, can't, don't) for a conversational tone.
+3. AVOID AI cliches: "In the digital age", "unlock your potential", "discover the secret", etc.
+4. BE specific: mention real Ahmedabad references contextually.
+5. FORMATting: Use **bold** for emphasis, bullet points for readability, and 2-3 sentence paragraphs.
 
-CRITICAL RULES FOR MODERN SEO (2026):
-1. Write for HUMANS first, search engines second
-2. Use keywords NATURALLY - never force them
-CRITICAL: ANTI-AI DETECTION RULES:
-- NEVER use generic AI opening phrases: "In the digital age", "In today's fast-paced world", "Are you looking to unlock...", "Discover the secret...", "The landscape of..."
-- VARY sentence lengths: some short, some long. Use contractions (it's, can't, don't).
-- USE an active, personal voice. Talk to the reader as a expert mentor.
-- Avoid repetitive paragraph structures.
-- AVOID "Summary" or "Conclusion" headers that sound like an AI report—use natural headers like "What's Next?" or "Final Thoughts".
-- BE specific: use real Ahmedabad references where relevant (since the context is often Ahmedabad).
+{links_context if len(all_suggestions) > 3 else ''} # Only keep context here if list is long
 
-{links_context}
-
-KEYWORD USAGE GUIDELINES:
-- Use only the 4-5 provided keywords
-- Each keyword should appear at most 1-2 times in the entire section
-- NEVER start multiple paragraphs with the same keyword phrase
-- NEVER repeat exact keyword phrases back-to-back
-
-WRITING STYLE:
-- Conversational and engaging
-- Clear and concise
-- Use examples and stories
-- Break up text with varied sentence structure
-- Focus on reader benefit
-
-INCLUDE NATURALLY (not forced):
-- Contact: +919879972778 or +919925822542 (mention once, contextually)
-- When you mention a phone number, format it as a clickable link: `[+919879972778](tel:+919879972778)`
-- Any internal page mention must be a markdown link (e.g., `[Services](https://example.com/services)`).
-
-Return JSON with 'section_markdown' field containing well-written content.
-
-BAD EXAMPLE (keyword stuffing):
-"From AI content generation for agencies to sophisticated AI creator systems advertising, AI workflow ad agencies are transforming. AI strategy ad agencies using AI tools for ad agencies..."
-
-GOOD EXAMPLE (natural):
-"Modern agencies are discovering how artificial intelligence transforms their workflow. From content creation to campaign optimization, these tools are reshaping how teams work..."
-"""
+Return only the well-written Markdown content for the requested section. Do NOT return JSON."""
         
         for section in outline['sections']:
             section_title = section.get('title', 'Section') if isinstance(section, dict) else str(section)
@@ -422,45 +402,36 @@ GOOD EXAMPLE (natural):
             section_focus = section.get('focus', 'Provide value') if isinstance(section, dict) else 'Provide value'
             
             section_input = f"""
-Section Title: {section_title}
-Target Words: {section_words}
-Section Focus: {section_focus}
+WRITING PERMISSION: Write the blog section titled "{section_title}".
 
-SEO Keywords (use naturally, don't force):
-- Primary: {seo_data.get('primary_keyword', topic)}
-- Keywords (total 4-5): {', '.join(seo_data.get('keywords', [])[:5])}
+SECTION REQUIREMENTS:
+- Target Words: {section_words}
+- Section Purpose: {section_focus}
 
-Context: {topic} for {audience}
-Goal: {goal}
+{links_context}
 
-Previous content (for context, don't repeat): {blog_content[-300:] if blog_content else 'This is the first section'}
+SEO KEYWORDS (use 1-2 naturally):
+- {', '.join(seo_data.get('keywords', [])[:5])}
 
-Write engaging, natural content that provides real value. Avoid keyword stuffing.
-For this section, use only 1-2 of the provided keywords that fit best, and avoid repeating the same keyword-heavy phrasing from earlier sections.
+ADDITIONAL CONTACT INFO:
+- +919879972778 or +919925822542 (mention naturally)
+- [Services](https://pandavaz.com/services/) (mention once naturally as a link)
+
+PREVIOUS PROGRESS:
+{blog_content[-400:] if blog_content else 'This is the very first section.'}
+
+INSTRUCTION: Write only the content for this specific section. Use headings ONLY if they are sub-headings (###). The main section heading (##) will be added automatically.
 """
             
             try:
-                written = self.ai_call(writer_sys, section_input)
+                # Use plain text mode for higher reliability with Bytez models
+                written = self.ai_call(writer_sys, section_input, json_mode=False)
                 
-                # Handle different response formats
-                if isinstance(written, dict):
-                    if 'section_markdown' in written:
-                        blog_content += f"\n\n{written['section_markdown']}"
-                    elif 'content' in written:
-                        blog_content += f"\n\n{written['content']}"
-                    elif 'raw_content' in written:
-                        blog_content += f"\n\n{written['raw_content']}"
-                    else:
-                        # If no expected field, use the whole dict as string
-                        blog_content += f"\n\n## {section_title}\n\n{str(written)}"
-                elif isinstance(written, str):
-                    blog_content += f"\n\n## {section_title}\n\n{written}"
-                else:
-                    blog_content += f"\n\n## {section_title}\n\n{str(written)}"
+                # Ensure we always add the main section header
+                blog_content += f"\n\n## {section_title}\n\n{str(written).strip()}"
                     
             except Exception as e:
-                # If section writing fails, add a placeholder
-                blog_content += f"\n\n## {section_title}\n\n[Content generation failed for this section: {str(e)}]"
+                blog_content += f"\n\n## {section_title}\n\n[Content generation failed: {str(e)}]"
             
         blog_content = self._auto_link_urls(blog_content)
         blog_content = self._auto_link_phone_numbers(blog_content)
@@ -492,19 +463,22 @@ For this section, use only 1-2 of the provided keywords that fit best, and avoid
             return text
         import re
 
-        numbers = ["+919879972778", "+919925822542"]
-        pattern = re.compile("|".join(re.escape(n) for n in numbers))
+        # Match common variations of the phone numbers
+        numbers = ["9879972778", "9925822542"]
+        # Pattern matches numbers with optional +, optional 91, and optional spaces/dashes
+        pattern = re.compile(r"(\+?91[\s-]?)?(" + "|".join(re.escape(n) for n in numbers) + r")")
 
         def replacer(match: re.Match) -> str:
-            number = match.group(0)
+            full_match = match.group(0)
+            clean_number = "+91" + match.group(2)
             start = match.start()
             # Skip if already part of a tel: link or markdown link.
             if start >= 4 and text[start - 4:start] == "tel:":
-                return number
+                return full_match
             if start >= 2 and text[start - 2:start] == "](":
-                return number
+                return full_match
             if start >= 1 and text[start - 1:start] == "[":
-                return number
-            return f"[{number}](tel:{number})"
+                return full_match
+            return f"[{full_match}](tel:{clean_number})"
 
         return pattern.sub(replacer, text)
