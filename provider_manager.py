@@ -62,7 +62,7 @@ class ProviderManager:
     def _initialize_providers(self) -> List[ProviderConfig]:
         """Initialize only the Bytez provider as requested."""
         return [
-            ProviderConfig("bytez", "BYTEZ_API_KEY", "https://api.bytez.com/v1"),
+            ProviderConfig("bytez", "BYTEZ_API_KEY", "https://api.bytez.com/models/v2/openai/v1"),
         ]
     
     def get_available_providers(self) -> List[str]:
@@ -175,7 +175,7 @@ class ProviderManager:
             for attempt in range(3):  # up to 3 tries per model
                 try:
                     response = requests.post(
-                        "https://api.bytez.com/v1/chat/completions",
+                        "https://api.bytez.com/models/v2/openai/v1/chat/completions",
                         json=payload,
                         headers=headers,
                         timeout=timeout,
