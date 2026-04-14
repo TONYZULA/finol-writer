@@ -428,8 +428,18 @@ INSTRUCTION: Write only the content for this specific section. Use headings ONLY
                 # Use plain text mode for higher reliability with Bytez models
                 written = self.ai_call(writer_sys, section_input, json_mode=False)
                 
-                # Ensure we always add the main section header
-                blog_content += f"\n\n## {section_title}\n\n{str(written).strip()}"
+                # CLEANING: Remove the section title if the AI repeated it at the start
+                clean_written = str(written).strip()
+                # Remove common header prefixes if AI added them
+                temp_text = clean_written.lstrip('#').strip()
+                
+                # If the AI started with the section title, strip it to avoid duplication
+                if temp_text.lower().startswith(section_title.lower()):
+                    # Find where the title ends and keep the rest
+                    clean_written = temp_text[len(section_title):].lstrip(' :-\n\r').strip()
+                
+                # Ensure we always add the main section header exactly once
+                blog_content += f"\n\n## {section_title}\n\n{clean_written}"
                     
             except Exception as e:
                 blog_content += f"\n\n## {section_title}\n\n[Content generation failed: {str(e)}]"
