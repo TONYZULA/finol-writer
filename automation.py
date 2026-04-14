@@ -3,6 +3,7 @@ import json
 import requests
 import streamlit as st
 import markdown
+from typing import List, Dict
 from tavily import TavilyClient
 from provider_manager import ProviderManager
 
