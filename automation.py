@@ -433,9 +433,41 @@ INSTRUCTION: Write only the content for this specific section. Use headings ONLY
             except Exception as e:
                 blog_content += f"\n\n## {section_title}\n\n[Content generation failed: {str(e)}]"
             
+        # Post-Processing Failsafe:
+        # If the AI mentioned our anchor phrases but forgot the link brackets, fix it now.
+        blog_content = self._apply_pillar_failsafe(blog_content, all_suggestions)
+        
         blog_content = self._auto_link_urls(blog_content)
         blog_content = self._auto_link_phone_numbers(blog_content)
         return self.humanize_and_sanitize(blog_content)
+
+    def _apply_pillar_failsafe(self, text: str, suggestions: List[Dict]) -> str:
+        """
+        Manually inject links if the AI used the anchor text but omitted the URL.
+        Prevents cases where AI ignores markdown formatting instructions.
+        """
+        if not text or not suggestions:
+            return text
+            
+        import re
+        processed = text
+        for s in suggestions:
+            anchor = s.get('title', '').strip()
+            url = s.get('url', '').strip()
+            if not anchor or not url:
+                continue
+            
+            # Escape anchor for regex
+            safe_anchor = re.escape(anchor)
+            
+            # Pattern: find the anchor text ONLY if it's NOT already part of a link
+            # Match anchor if not preceded by [ or followed by ](
+            pattern = re.compile(rf"(?<!\[){safe_anchor}(?!\]\()", re.IGNORECASE)
+            
+            # Replace occurrences with markdown link
+            processed = pattern.sub(f"[{anchor}]({url})", processed)
+            
+        return processed
 
     def _auto_link_urls(self, text: str) -> str:
         """Convert bare URLs to markdown links when not already linked."""
