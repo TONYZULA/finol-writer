@@ -197,13 +197,30 @@ class ProviderManager:
                     )
                     response.raise_for_status()
                     data = response.json()
-                    # Native Bytez response uses 'output', not OpenAI 'choices'
+                    
+                    # 1. Check for native Bytez 'output' field
                     if "output" in data:
-                        return data["output"]
-                    # Fallback: try OpenAI-style response just in case
-                    if "choices" in data:
-                        return data["choices"][0]["message"]["content"]
-                    # Last resort: return full JSON as string
+                        output = data["output"]
+                        # If output is a dictionary (common in Chat models), extract content
+                        if isinstance(output, dict):
+                            if "content" in output:
+                                return output["content"]
+                            if "text" in output:
+                                return output["text"]
+                            if "message" in output and isinstance(output["message"], dict):
+                                return output["message"].get("content", str(output))
+                            return str(output)
+                        return str(output)
+                        
+                    # 2. Check for OpenAI-style 'choices'
+                    if "choices" in data and len(data["choices"]) > 0:
+                        choice = data["choices"][0]
+                        if "message" in choice and isinstance(choice["message"], dict):
+                            return choice["message"].get("content", "")
+                        if "text" in choice:
+                            return choice["text"]
+                            
+                    # 3. Last resort: serialized JSON
                     return json.dumps(data)
                 except RequestsHTTPError as e:
                     status = e.response.status_code if e.response is not None else 0
