@@ -162,7 +162,6 @@ class ProviderManager:
         "mistralai/Mistral-7B-Instruct-v0.3",
         "microsoft/Phi-3-mini-4k-instruct",
         "microsoft/Phi-3.5-mini-instruct",
-        "google/gemma-2-2b-it",
     ]
 
     def _call_bytez_api(self, model: str, messages: List[Dict],
@@ -377,13 +376,22 @@ class ProviderManager:
                 error_msg = f"HTTP {status_code}: {str(e)}"
                 
                 if status_code in (401, 403):
-                    # Auth failure — disable provider
-                    provider.is_available = False
-                    provider.last_error = f"Auth failed: {error_msg}"
+                    # For Bytez, 403 often means the specific model is restricted for free tier.
+                    # Only disable provider if it's a 401 (Unauthorized) or if it's a 403 on multiple models.
+                    if status_code == 401:
+                        provider.is_available = False
+                        provider.last_error = f"Auth failed (401): {error_msg}"
+                    else:
+                        # 403: Model restricted. Don't disable provider, just mark failure.
+                        provider.failure_count += 1
+                        provider.last_error = f"Model restricted (403): {error_msg}"
+                        failed_providers.append(provider.name)
+                        last_error = e
+                        
                     provider.last_error_time = time.time()
                     self.call_history.append({
                         "provider": provider.name,
-                        "status": "auth_failed",
+                        "status": "auth_failed" if status_code == 401 else "model_restricted",
                         "error": error_msg,
                         "timestamp": time.time(),
                     })
