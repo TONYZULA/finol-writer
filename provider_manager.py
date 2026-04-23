@@ -158,6 +158,7 @@ class ProviderManager:
     # Closed-source models (google/, openai/, anthropic/) require an additional provider-key header
     # which we don't manage here, so keep this list open-source only.
     BYTEZ_FALLBACK_MODELS = [
+        "Qwen/Qwen2.5-7B-Instruct",
         "meta-llama/Meta-Llama-3.1-8B-Instruct",
         "mistralai/Mistral-7B-Instruct-v0.3",
         "microsoft/Phi-3-mini-4k-instruct",
