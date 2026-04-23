@@ -15,6 +15,8 @@ class FinolAutomation:
         self.keys = {
             "TAVILY_API_KEY": st.secrets.get("TAVILY_API_KEY", ""),
             "BYTEZ_API_KEY": st.secrets.get("BYTEZ_API_KEY", ""),
+            "GOOGLE_API_KEY": st.secrets.get("GOOGLE_API_KEY", ""),
+            "OPENROUTER_API_KEY": st.secrets.get("OPENROUTER_API_KEY", ""),
         }
         
         # Initialize provider manager for multi-provider fallback

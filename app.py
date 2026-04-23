@@ -20,15 +20,17 @@ with st.sidebar:
     st.title("⚙️ Settings")
     
     # Provider and model selection
-    model = st.selectbox("Select AI Model (Bytez)", [
-        "google/gemini-2.5-pro",
-        "google/gemini-2.5-flash",
-        "google/gemini-2.5-flash-lite",
+    model = st.selectbox("Select AI Model", [
+        "google/gemini-1.5-flash",
+        "google/gemini-1.5-pro",
         "openai/gpt-4o-mini",
-        "anthropic/claude-sonnet-4-5",
-        "Qwen/Qwen3-4B",
-        "meta-llama/Llama-2-7b-chat-hf",
+        "anthropic/claude-3-5-sonnet-latest",
+        "meta-llama/Meta-Llama-3.1-8B-Instruct",
+        "mistralai/Mistral-7B-Instruct-v0.3",
+        "microsoft/Phi-3-mini-4k-instruct",
     ])
+    
+    st.info("💡 Multi-provider fallback is enabled. If Bytez fails, the system will automatically try other configured providers (Google, OpenRouter).")
     
     st.markdown("---")
     st.subheader("WordPress Credentials")
@@ -59,21 +61,52 @@ with tab1:
         goal = st.text_area("Goal")
         target = st.number_input("Word Target", value=1000)
         
-        # Knowledge Base for Internal Linking
+        # Knowledge Base / Pillar Links for Internal Linking
         knowledge_input = st.text_area(
-            "Knowledge Base / Core Links (Optional)", 
-            placeholder="Title: URL\nServices: https://pandavaz.com/services\nAbout: https://pandavaz.com/about",
-            help="Add links to your core pages (Services, Portfolio, etc.) so the AI can link to them naturally."
+            "Pillar / Internal Links (Optional)",
+            placeholder=(
+                "Anchor Text: URL\n"
+                "best branding agency in Ahmedabad: https://pandavaz.com/best-branding-agency-in-ahmedabad/\n"
+                "logo design trends in Ahmedabad: https://pandavaz.com/logo-design-ahmedabad-2026-trends/\n"
+                "social media marketing for your brand: https://pandavaz.com/the-best-social-media-agency-in-ahmedabad-for-2026/"
+            ),
+            help=(
+                "One link per line. Format: 'Exact Anchor Text: https://your-url'\n"
+                "The AI will use your exact phrase as the clickable hyperlink text in the blog.\n"
+                "Bare URLs are also accepted — title is auto-generated from the URL slug."
+            ),
+            height=140,
         )
         
-        # Parse knowledge base
+        # Parse knowledge base — supports both "Title: URL" and bare URL formats
+        def _url_to_title(url: str) -> str:
+            """Auto-generate a readable title from a URL slug."""
+            try:
+                from urllib.parse import urlparse
+                path = urlparse(url).path.rstrip('/')
+                slug = path.split('/')[-1] if path else ''
+                return slug.replace('-', ' ').replace('_', ' ').title() or url
+            except Exception:
+                return url
+
         knowledge_base = []
         if knowledge_input:
-            lines = knowledge_input.split('\n')
-            for line in lines:
-                if ':' in line:
-                    parts = line.split(':', 1)
-                    knowledge_base.append({"title": parts[0].strip(), "url": parts[1].strip()})
+            for raw_line in knowledge_input.split('\n'):
+                line = raw_line.strip()
+                if not line:
+                    continue
+                # Bare URL: line starts with http:// or https://
+                if line.startswith('http://') or line.startswith('https://'):
+                    knowledge_base.append({"title": _url_to_title(line), "url": line})
+                elif ':' in line:
+                    # "Title: URL" format — split on FIRST colon only
+                    title, url = line.split(':', 1)
+                    url = url.strip()
+                    # Re-attach the protocol if the URL got split (e.g. "Title:https://...")
+                    if url.startswith('//') or not url.startswith('http'):
+                        # It's a relative path or the split ate 'https'
+                        pass
+                    knowledge_base.append({"title": title.strip(), "url": url})
 
         if st.button("Generate Draft"):
             agent = FinolAutomation(model)

@@ -56,14 +56,28 @@ class ProviderManager:
         self.retry_backoff_base = 2  # exponential backoff: 2^n seconds
         
     def _setup_environment(self):
-        """Set up environment variables for Bytez."""
+        """Set up environment variables for providers."""
         os.environ["BYTEZ_API_KEY"] = self.secrets.get("BYTEZ_API_KEY", "")
+        os.environ["GOOGLE_API_KEY"] = self.secrets.get("GOOGLE_API_KEY", "")
+        os.environ["OPENROUTER_API_KEY"] = self.secrets.get("OPENROUTER_API_KEY", "")
     
     def _initialize_providers(self) -> List[ProviderConfig]:
-        """Initialize only the Bytez provider as requested."""
-        return [
-            ProviderConfig("bytez", "BYTEZ_API_KEY", "https://api.bytez.com/models/v2/openai/v1"),
-        ]
+        """Initialize all available providers based on keys."""
+        providers = []
+        
+        # Bytez (Native)
+        if self.secrets.get("BYTEZ_API_KEY"):
+            providers.append(ProviderConfig("bytez", "BYTEZ_API_KEY"))
+            
+        # Google (Gemini)
+        if self.secrets.get("GOOGLE_API_KEY"):
+            providers.append(ProviderConfig("google", "GOOGLE_API_KEY"))
+            
+        # OpenRouter
+        if self.secrets.get("OPENROUTER_API_KEY"):
+            providers.append(ProviderConfig("openrouter", "OPENROUTER_API_KEY", "https://openrouter.ai/api/v1"))
+            
+        return providers
     
     def get_available_providers(self) -> List[str]:
         """Get list of available provider names."""
@@ -117,9 +131,25 @@ class ProviderManager:
         """
         if provider == "bytez":
             # Default to a reliable open-source model that works with Bytez key only.
-            # Closed-source models (google/, openai/, etc.) need an extra provider-key header.
             if not model or model == "default":
                 return "meta-llama/Meta-Llama-3.1-8B-Instruct"
+            return model
+            
+        if provider == "google":
+            if not model or "gemini" not in model.lower():
+                return "gemini/gemini-1.5-flash"
+            # litellm uses 'gemini/' prefix for Google
+            if model.startswith("google/"):
+                return model.replace("google/", "gemini/", 1)
+            if not model.startswith("gemini/"):
+                return f"gemini/{model}"
+            return model
+            
+        if provider == "openrouter":
+            if not model or model == "default":
+                return "openrouter/google/gemini-flash-1.5"
+            if not model.startswith("openrouter/"):
+                return f"openrouter/{model}"
             return model
         
         return model
@@ -131,6 +161,8 @@ class ProviderManager:
         "meta-llama/Meta-Llama-3.1-8B-Instruct",
         "mistralai/Mistral-7B-Instruct-v0.3",
         "microsoft/Phi-3-mini-4k-instruct",
+        "microsoft/Phi-3.5-mini-instruct",
+        "google/gemma-2-2b-it",
     ]
 
     def _call_bytez_api(self, model: str, messages: List[Dict],
@@ -228,8 +260,13 @@ class ProviderManager:
                         # 4xx — no point retrying this model
                         last_exc = e
                         break
-                    # 5xx — transient server error, retry with backoff
+                    # 5xx or specific container errors — retry with backoff or skip
                     last_exc = e
+                    
+                    # If it's the "unable to load model" container error, skip to next model faster
+                    if response is not None and "unable to load the model" in response.text:
+                        break # Go to next model in ladder
+                        
                     if attempt < 2:
                         time.sleep(2 ** attempt)  # 1s then 2s
                     else:
