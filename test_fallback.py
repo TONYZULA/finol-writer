@@ -8,6 +8,90 @@ import sys
 from provider_manager import ProviderManager
 
 
+class _FakeResponse:
+    def __init__(self, status_code, payload=None, text=""):
+        self.status_code = status_code
+        self._payload = payload or {}
+        self.text = text
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            import requests
+
+            raise requests.exceptions.HTTPError(
+                f"{self.status_code} Client Error", response=self
+            )
+
+    def json(self):
+        return self._payload
+
+
+def test_bytez_uses_openai_compatible_endpoint():
+    """Verify Bytez chat calls use the current OpenAI-compatible route."""
+    manager = ProviderManager({"BYTEZ_API_KEY": "test-key"})
+    calls = []
+
+    def fake_post(url, json, headers, timeout):
+        calls.append({"url": url, "json": json, "headers": headers})
+        return _FakeResponse(
+            200,
+            {
+                "choices": [
+                    {"message": {"content": "ok"}}
+                ]
+            },
+        )
+
+    import provider_manager as provider_module
+
+    original_post = provider_module.requests.post
+    provider_module.requests.post = fake_post
+    try:
+        response = manager._call_bytez_api(
+            "mistralai/Mistral-7B-Instruct-v0.3",
+            [{"role": "user", "content": "hello"}],
+            json_mode=False,
+        )
+    finally:
+        provider_module.requests.post = original_post
+
+    assert response == "ok"
+    assert calls[0]["url"] == "https://api.bytez.com/models/v2/openai/v1/chat/completions"
+    assert calls[0]["json"]["model"] == "mistralai/Mistral-7B-Instruct-v0.3"
+    assert calls[0]["headers"]["Authorization"] == "test-key"
+
+
+def test_bytez_falls_back_from_missing_model():
+    """A missing selected model should fall back to the default Qwen chat model."""
+    manager = ProviderManager({"BYTEZ_API_KEY": "test-key"})
+    attempted_models = []
+
+    def fake_post(url, json, headers, timeout):
+        attempted_models.append(json["model"])
+        if len(attempted_models) == 1:
+            return _FakeResponse(404, text="not found")
+        return _FakeResponse(200, {"output": {"content": "fallback ok"}})
+
+    import provider_manager as provider_module
+
+    original_post = provider_module.requests.post
+    provider_module.requests.post = fake_post
+    try:
+        response = manager._call_bytez_api(
+            "mistralai/Mistral-7B-Instruct-v0.3",
+            [{"role": "user", "content": "hello"}],
+            json_mode=False,
+        )
+    finally:
+        provider_module.requests.post = original_post
+
+    assert response == "fallback ok"
+    assert attempted_models[:2] == [
+        "mistralai/Mistral-7B-Instruct-v0.3",
+        manager.BYTEZ_DEFAULT_MODEL,
+    ]
+
+
 def test_provider_configuration():
     """Test that providers are configured correctly."""
     print("=" * 60)
@@ -18,7 +102,7 @@ def test_provider_configuration():
     secrets = {
         "GOOGLE_API_KEY": os.getenv("GOOGLE_API_KEY", ""),
         "OPENROUTER_API_KEY": os.getenv("OPENROUTER_API_KEY", ""),
-        "BYTEZ_API_KEY": os.getenv("BYTEZ_API_KEY", "444d1ac0a8b038cbe61ff956a8cdd700"),
+        "BYTEZ_API_KEY": os.getenv("BYTEZ_API_KEY", ""),
         "OPENROUTER_API_BASE": os.getenv("OPENROUTER_API_BASE", "https://openrouter.ai/api/v1"),
         "OR_SITE_URL": os.getenv("OR_SITE_URL", ""),
         "OR_APP_NAME": os.getenv("OR_APP_NAME", ""),
@@ -244,7 +328,7 @@ if __name__ == "__main__":
     print("\nMake sure you have set the following environment variables:")
     print("  - GOOGLE_API_KEY (optional)")
     print("  - OPENROUTER_API_KEY (optional)")
-    print("  - BYTEZ_API_KEY (defaults to free tier key)")
+    print("  - BYTEZ_API_KEY")
     print("\nAt least one provider must be configured.\n")
     
     success = run_all_tests()

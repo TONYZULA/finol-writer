@@ -100,13 +100,14 @@ def show_provider_selector(default_model: str = None):
     st.subheader("🤖 AI Provider & Model Selection")
     
     models = [
+        "Qwen/Qwen3-4B",
+        "Qwen/Qwen3-1.7B",
+        "Qwen/Qwen3-0.6B",
         "google/gemini-2.5-pro",
         "google/gemini-2.5-flash",
         "google/gemini-2.5-flash-lite",
         "openai/gpt-4o-mini",
         "anthropic/claude-sonnet-4-5",
-        "Qwen/Qwen3-4B",
-        "meta-llama/Llama-2-7b-chat-hf",
     ]
     
     selected_model = st.selectbox(

@@ -107,15 +107,10 @@ export TAVILY_API_KEY="..."
 
 ## 🤖 Available Models
 
-### Bytez (70+ Free Models)
-- **OpenAI**: `openai/gpt-4o-mini`, `openai/gpt-3.5-turbo`
-- **Anthropic**: `anthropic/claude-sonnet-4-5`, `anthropic/claude-haiku-4-5`
-- **Google**: `google/gemini-2.5-flash`, `google/gemma-3-4b-it`
-- **Meta**: `meta-llama/Llama-2-7b-chat-hf`
-- **Qwen**: `Qwen/Qwen3-4B`, `Qwen/Qwen2.5-3B-Instruct`
-- **DeepSeek**: `deepseek-ai/DeepSeek-R1-Distill-Qwen-7B`
-- **Mistral**: `mistralai/Mistral-7B-Instruct-v0.3`
-- And 60+ more
+### Bytez Chat Models
+- **Default**: `Qwen/Qwen3-4B`
+- **Fallbacks**: `Qwen/Qwen3-1.7B`, `Qwen/Qwen3-0.6B`
+- **Closed-source options**: `openai/...`, `anthropic/...`, `google/...`, and `mistral/...` model IDs can be used through Bytez when your Bytez account supports them.
 
 See [Bytez Models Page](https://bytez.com/models?task=chat) for the complete list.
 

@@ -21,13 +21,13 @@ with st.sidebar:
     
     # Provider and model selection
     model = st.selectbox("Select AI Model", [
+        "Qwen/Qwen3-4B",
+        "Qwen/Qwen3-1.7B",
+        "Qwen/Qwen3-0.6B",
         "google/gemini-1.5-flash",
         "google/gemini-1.5-pro",
         "openai/gpt-4o-mini",
         "anthropic/claude-3-5-sonnet-latest",
-        "meta-llama/Meta-Llama-3.1-8B-Instruct",
-        "mistralai/Mistral-7B-Instruct-v0.3",
-        "microsoft/Phi-3-mini-4k-instruct",
     ])
     
     st.info("💡 Multi-provider fallback is enabled. If Bytez fails, the system will automatically try other configured providers (Google, OpenRouter).")

@@ -22,13 +22,12 @@ TAVILY_API_KEY = "your-tavily-api-key-here"
 
 ### 2. Getting API Keys
 
-#### Bytez (Free Tier)
+#### Bytez
 - Get a key at [Bytez.com](https://bytez.com/api)
-- Supports 70+ free tier models including:
-  - OpenAI models
-  - Anthropic Claude models
-  - Google Gemini models
-  - Open-source models (Llama, Mistral, Qwen, etc.)
+- The app defaults to current Bytez chat models:
+  - `Qwen/Qwen3-4B`
+  - `Qwen/Qwen3-1.7B`
+  - `Qwen/Qwen3-0.6B`
 
 #### Tavily Search
 1. Go to [Tavily.com](https://tavily.com)
@@ -82,10 +81,11 @@ for call in history:
 
 ## Available Models (Bytez)
 
-- OpenAI: `openai/gpt-4o-mini`, `openai/gpt-3.5-turbo`, etc.
-- Anthropic: `anthropic/claude-sonnet-4-5`, `anthropic/claude-haiku-4-5`, etc.
-- Google: `google/gemini-2.5-flash`, `google/gemma-3-4b-it`, etc.
-- Open-source: `Qwen/Qwen3-4B`, `meta-llama/Llama-2-7b-chat-hf`, etc.
+The default model list is maintained in `provider_manager.py`. The current Bytez fallback ladder is:
+
+- `Qwen/Qwen3-4B`
+- `Qwen/Qwen3-1.7B`
+- `Qwen/Qwen3-0.6B`
 
 See `provider_manager.py` for the default model list.
 

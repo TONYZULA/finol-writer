@@ -132,7 +132,7 @@ class ProviderManager:
         if provider == "bytez":
             # Default to a reliable open-source model that works with Bytez key only.
             if not model or model == "default":
-                return "meta-llama/Meta-Llama-3.1-8B-Instruct"
+                return self.BYTEZ_DEFAULT_MODEL
             return model
             
         if provider == "google":
@@ -157,11 +157,11 @@ class ProviderManager:
     # Open-source fallback ladder — these work with a Bytez key only (no provider key needed).
     # Closed-source models (google/, openai/, anthropic/) require an additional provider-key header
     # which we don't manage here, so keep this list open-source only.
+    BYTEZ_DEFAULT_MODEL = "Qwen/Qwen3-4B"
     BYTEZ_FALLBACK_MODELS = [
-        "Qwen/Qwen2.5-7B-Instruct",
-        "meta-llama/Meta-Llama-3.1-8B-Instruct",
-        "mistralai/Mistral-7B-Instruct-v0.3",
-        "microsoft/Phi-3-mini-4k-instruct",
+        BYTEZ_DEFAULT_MODEL,
+        "Qwen/Qwen3-1.7B",
+        "Qwen/Qwen3-0.6B",
     ]
 
     def _call_bytez_api(self, model: str, messages: List[Dict],
@@ -170,13 +170,13 @@ class ProviderManager:
         Direct call to the native Bytez API.
 
         Bytez endpoint format:
-            POST https://api.bytez.com/models/v2/{org}/{model-name}
+            POST https://api.bytez.com/models/v2/openai/v1/chat/completions
         Auth:
             Authorization: {api_key}   (no 'Bearer' prefix)
         Payload:
-            { "messages": [...], "stream": false }
+            { "model": "...", "messages": [...], "stream": false }
         Response:
-            { "output": "...", ... }   (NOT OpenAI choices format)
+            OpenAI-compatible choices, or native Bytez output.
 
         On 4xx errors raises immediately. On 5xx retries up to 2 times
         with backoff, then moves to the next model in BYTEZ_FALLBACK_MODELS.
@@ -209,12 +209,11 @@ class ProviderManager:
 
         last_exc = None
         for attempt_model in ladder:
-            # Bytez native endpoint: split 'org/model-name' into URL segments
-            # e.g. 'meta-llama/Meta-Llama-3.1-8B-Instruct'
-            #   -> https://api.bytez.com/models/v2/meta-llama/Meta-Llama-3.1-8B-Instruct
-            url = f"https://api.bytez.com/models/v2/{attempt_model}"
+            url = "https://api.bytez.com/models/v2/openai/v1/chat/completions"
             payload = {
+                "model": attempt_model,
                 "messages": messages,
+                "max_completion_tokens": 2048,
                 "stream": False,
             }
 
