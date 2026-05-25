@@ -6,6 +6,7 @@ import markdown
 from typing import List, Dict
 from tavily import TavilyClient
 from provider_manager import ProviderManager
+from text_sanitizer import strip_non_printable
 
 class FinolAutomation:
     def __init__(self, model):
@@ -54,22 +55,11 @@ class FinolAutomation:
         return []
 
     def humanize_and_sanitize(self, text):
-        """Remove invisible characters and potential AI-watermark patterns."""
+        """Remove hidden copy-paste artifacts and potential AI-watermark patterns."""
         if not text:
             return ""
-        
-        # 1. Remove Zero-Width Spaces and invisible control characters (often used as AI signatures)
-        invisible_chars = [
-            '\u200b', '\u200c', '\u200d', '\ufeff', # Zero-width
-            '\u00ad', # Soft hyphen
-            '\u2028', '\u2029', # Line/Paragraph separators
-        ]
-        sanitized = text
-        for char in invisible_chars:
-            sanitized = sanitized.replace(char, '')
-            
-        # 2. Basic 'Humanizer' - vary common AI repetitive structures
-        # (This is handled primarily via the refined prompt, but we ensure clean ASCII/UTF-8 here)
+
+        sanitized = strip_non_printable(text)
         return sanitized.strip()
 
     def ai_call(self, system_prompt, user_prompt, json_mode=True):
@@ -152,6 +142,9 @@ class FinolAutomation:
         # Ensure base_url doesn't have trailing /wp-json
         if base_url.endswith('/wp-json'):
             base_url = base_url[:-8]
+
+        clean_title = self.humanize_and_sanitize(title) or "Untitled"
+        clean_content = self.humanize_and_sanitize(content)
         
         media_id = None
         
@@ -159,7 +152,9 @@ class FinolAutomation:
         if image_bytes:
             # Upload media (cover image)
             media_url = f"{base_url}/wp-json/wp/v2/media"
-            safe_filename = os.path.basename(image_filename or "cover.jpg").replace('"', "")
+            safe_filename = os.path.basename(
+                strip_non_printable(image_filename or "cover.jpg")
+            ).replace('"', "") or "cover.jpg"
             content_type = image_content_type or "image/jpeg"
             headers = {
                 "Content-Disposition": f'attachment; filename="{safe_filename}"',
@@ -195,12 +190,12 @@ class FinolAutomation:
         
         # Convert Markdown to HTML for WordPress
         # uses extensions for better tables, fenced code blocks, etc.
-        html_content = markdown.markdown(content, extensions=['fenced_code', 'tables', 'nl2br', 'sane_lists'])
+        html_content = markdown.markdown(clean_content, extensions=['fenced_code', 'tables', 'nl2br', 'sane_lists'])
         
         # Create post with HTML content
         post_url = f"{base_url}/wp-json/wp/v2/posts"
         payload = {
-            "title": title,
+            "title": clean_title,
             "content": html_content,
             "status": "publish"
         }

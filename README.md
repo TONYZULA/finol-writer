@@ -10,6 +10,7 @@ Reliable WordPress blog automation using Bytez models with built-in retries and 
 - **70+ Models Available**: OpenAI, Anthropic, Google, Meta, and open-source models via Bytez
 - **WordPress Integration**: Direct publishing
 - **Custom Cover Uploads**: Choose a featured image per post before publishing
+- **Hidden Character Cleanup**: Removes non-printable copy/paste artifacts before publishing
 - **Research-Powered Content**: Uses Tavily for real-time web research
 
 ## 📋 Table of Contents
