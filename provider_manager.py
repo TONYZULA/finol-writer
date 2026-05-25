@@ -163,20 +163,29 @@ class ProviderManager:
         "Qwen/Qwen3-1.7B",
         "Qwen/Qwen3-0.6B",
     ]
+    BYTEZ_OAI_PROVIDER_PREFIXES = (
+        "openai/",
+        "anthropic/",
+        "google/",
+        "mistral/",
+        "cohere/",
+    )
 
     def _call_bytez_api(self, model: str, messages: List[Dict],
                         json_mode: bool = True, timeout: int = 120) -> str:
         """
         Direct call to the native Bytez API.
 
-        Bytez endpoint format:
+        Primary Bytez endpoint format:
+            POST https://api.bytez.com/models/v2/{org}/{model-name}
+        Closed-source best-effort endpoint:
             POST https://api.bytez.com/models/v2/openai/v1/chat/completions
         Auth:
             Authorization: {api_key}   (no 'Bearer' prefix)
         Payload:
-            { "model": "...", "messages": [...], "stream": false }
+            { "messages": [...], "stream": false, "params": {...} }
         Response:
-            OpenAI-compatible choices, or native Bytez output.
+            Native Bytez output, or OpenAI-compatible choices.
 
         On 4xx errors raises immediately. On 5xx retries up to 2 times
         with backoff, then moves to the next model in BYTEZ_FALLBACK_MODELS.
@@ -209,69 +218,85 @@ class ProviderManager:
 
         last_exc = None
         for attempt_model in ladder:
-            url = "https://api.bytez.com/models/v2/openai/v1/chat/completions"
-            payload = {
-                "model": attempt_model,
-                "messages": messages,
-                "max_completion_tokens": 2048,
-                "stream": False,
-            }
+            requests_to_try = []
+            if attempt_model.startswith(self.BYTEZ_OAI_PROVIDER_PREFIXES):
+                requests_to_try.append((
+                    "https://api.bytez.com/models/v2/openai/v1/chat/completions",
+                    {
+                        "model": attempt_model,
+                        "messages": messages,
+                        "max_completion_tokens": 2048,
+                        "stream": False,
+                    },
+                ))
+            else:
+                requests_to_try.append((
+                    f"https://api.bytez.com/models/v2/{attempt_model}",
+                    {
+                        "messages": messages,
+                        "stream": False,
+                        "params": {
+                            "max_length": 2048,
+                        },
+                    },
+                ))
 
-            for attempt in range(3):  # up to 3 tries per model
-                try:
-                    response = requests.post(
-                        url,
-                        json=payload,
-                        headers=headers,
-                        timeout=timeout,
-                    )
-                    response.raise_for_status()
-                    data = response.json()
-                    
-                    # 1. Check for native Bytez 'output' field
-                    if "output" in data:
-                        output = data["output"]
-                        # If output is a dictionary (common in Chat models), extract content
-                        if isinstance(output, dict):
-                            if "content" in output:
-                                return output["content"]
-                            if "text" in output:
-                                return output["text"]
-                            if "message" in output and isinstance(output["message"], dict):
-                                return output["message"].get("content", str(output))
+            for url, payload in requests_to_try:
+                for attempt in range(3):  # up to 3 tries per endpoint/model pair
+                    try:
+                        response = requests.post(
+                            url,
+                            json=payload,
+                            headers=headers,
+                            timeout=timeout,
+                        )
+                        response.raise_for_status()
+                        data = response.json()
+                        
+                        # 1. Check for native Bytez 'output' field
+                        if "output" in data:
+                            output = data["output"]
+                            # If output is a dictionary (common in Chat models), extract content
+                            if isinstance(output, dict):
+                                if "content" in output:
+                                    return output["content"]
+                                if "text" in output:
+                                    return output["text"]
+                                if "message" in output and isinstance(output["message"], dict):
+                                    return output["message"].get("content", str(output))
+                                return str(output)
                             return str(output)
-                        return str(output)
-                        
-                    # 2. Check for OpenAI-style 'choices'
-                    if "choices" in data and len(data["choices"]) > 0:
-                        choice = data["choices"][0]
-                        if "message" in choice and isinstance(choice["message"], dict):
-                            return choice["message"].get("content", "")
-                        if "text" in choice:
-                            return choice["text"]
                             
-                    # 3. Last resort: serialized JSON
-                    return json.dumps(data)
-                except RequestsHTTPError as e:
-                    status = e.response.status_code if e.response is not None else 0
-                    if status < 500:
-                        # 4xx — no point retrying this model
+                        # 2. Check for OpenAI-style 'choices'
+                        if "choices" in data and len(data["choices"]) > 0:
+                            choice = data["choices"][0]
+                            if "message" in choice and isinstance(choice["message"], dict):
+                                return choice["message"].get("content", "")
+                            if "text" in choice:
+                                return choice["text"]
+
+                        # 3. Last resort: serialized JSON
+                        return json.dumps(data)
+                    except RequestsHTTPError as e:
+                        status = e.response.status_code if e.response is not None else 0
+                        if status < 500:
+                            # 4xx — no point retrying this endpoint/model pair
+                            last_exc = e
+                            break
+                        # 5xx or specific container errors — retry with backoff or skip
                         last_exc = e
-                        break
-                    # 5xx or specific container errors — retry with backoff or skip
-                    last_exc = e
-                    
-                    # If it's the "unable to load model" container error, skip to next model faster
-                    if response is not None and "unable to load the model" in response.text:
-                        break # Go to next model in ladder
                         
-                    if attempt < 2:
-                        time.sleep(2 ** attempt)  # 1s then 2s
-                    else:
-                        break  # exhausted retries for this model
-                except Exception as e:
-                    last_exc = e
-                    raise  # non-HTTP errors (network, JSON parse) propagate immediately
+                        # If it's the "unable to load model" container error, skip to next model faster
+                        if response is not None and "unable to load the model" in response.text:
+                            break # Go to next model in ladder
+
+                        if attempt < 2:
+                            time.sleep(2 ** attempt)  # 1s then 2s
+                        else:
+                            break  # exhausted retries for this endpoint/model pair
+                    except Exception as e:
+                        last_exc = e
+                        raise  # non-HTTP errors (network, JSON parse) propagate immediately
 
         # All models and retries exhausted
         raise last_exc

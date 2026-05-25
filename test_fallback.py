@@ -26,21 +26,14 @@ class _FakeResponse:
         return self._payload
 
 
-def test_bytez_uses_openai_compatible_endpoint():
-    """Verify Bytez chat calls use the current OpenAI-compatible route."""
+def test_bytez_uses_native_chat_endpoint_for_qwen():
+    """Verify Bytez open-source chat calls use the model-specific route."""
     manager = ProviderManager({"BYTEZ_API_KEY": "test-key"})
     calls = []
 
     def fake_post(url, json, headers, timeout):
         calls.append({"url": url, "json": json, "headers": headers})
-        return _FakeResponse(
-            200,
-            {
-                "choices": [
-                    {"message": {"content": "ok"}}
-                ]
-            },
-        )
+        return _FakeResponse(200, {"output": {"content": "ok"}})
 
     import provider_manager as provider_module
 
@@ -48,7 +41,7 @@ def test_bytez_uses_openai_compatible_endpoint():
     provider_module.requests.post = fake_post
     try:
         response = manager._call_bytez_api(
-            "mistralai/Mistral-7B-Instruct-v0.3",
+            "Qwen/Qwen3-4B",
             [{"role": "user", "content": "hello"}],
             json_mode=False,
         )
@@ -56,19 +49,20 @@ def test_bytez_uses_openai_compatible_endpoint():
         provider_module.requests.post = original_post
 
     assert response == "ok"
-    assert calls[0]["url"] == "https://api.bytez.com/models/v2/openai/v1/chat/completions"
-    assert calls[0]["json"]["model"] == "mistralai/Mistral-7B-Instruct-v0.3"
+    assert calls[0]["url"] == "https://api.bytez.com/models/v2/Qwen/Qwen3-4B"
+    assert calls[0]["json"]["messages"] == [{"role": "user", "content": "hello"}]
+    assert calls[0]["json"]["params"]["max_length"] == 2048
     assert calls[0]["headers"]["Authorization"] == "test-key"
 
 
-def test_bytez_falls_back_from_missing_model():
-    """A missing selected model should fall back to the default Qwen chat model."""
+def test_bytez_falls_back_from_openai_compatible_404():
+    """A closed-source route 404 should fall back to the native Qwen chat endpoint."""
     manager = ProviderManager({"BYTEZ_API_KEY": "test-key"})
-    attempted_models = []
+    calls = []
 
     def fake_post(url, json, headers, timeout):
-        attempted_models.append(json["model"])
-        if len(attempted_models) == 1:
+        calls.append({"url": url, "json": json})
+        if len(calls) == 1:
             return _FakeResponse(404, text="not found")
         return _FakeResponse(200, {"output": {"content": "fallback ok"}})
 
@@ -78,7 +72,7 @@ def test_bytez_falls_back_from_missing_model():
     provider_module.requests.post = fake_post
     try:
         response = manager._call_bytez_api(
-            "mistralai/Mistral-7B-Instruct-v0.3",
+            "google/gemini-1.5-flash",
             [{"role": "user", "content": "hello"}],
             json_mode=False,
         )
@@ -86,10 +80,10 @@ def test_bytez_falls_back_from_missing_model():
         provider_module.requests.post = original_post
 
     assert response == "fallback ok"
-    assert attempted_models[:2] == [
-        "mistralai/Mistral-7B-Instruct-v0.3",
-        manager.BYTEZ_DEFAULT_MODEL,
-    ]
+    assert calls[0]["url"] == "https://api.bytez.com/models/v2/openai/v1/chat/completions"
+    assert calls[0]["json"]["model"] == "google/gemini-1.5-flash"
+    assert calls[1]["url"] == f"https://api.bytez.com/models/v2/{manager.BYTEZ_DEFAULT_MODEL}"
+    assert "model" not in calls[1]["json"]
 
 
 def test_provider_configuration():
