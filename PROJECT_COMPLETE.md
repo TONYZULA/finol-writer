@@ -118,7 +118,7 @@ Your WordPress blog automation system now has enterprise-grade reliability with 
 ### 4. Bytez Integration ✅
 - 70+ free tier models
 - Direct API implementation
-- Pre-configured API key
+- Requires your own Bytez API key
 - OpenAI, Anthropic, Google, Meta models
 
 ### 5. Production-Ready Code ✅
@@ -171,7 +171,7 @@ cp .streamlit/secrets.toml.example .streamlit/secrets.toml
 
 Minimum configuration (works immediately):
 ```toml
-BYTEZ_API_KEY = "444d1ac0a8b038cbe61ff956a8cdd700"  # Pre-configured!
+BYTEZ_API_KEY = "your-bytez-api-key-here"
 TAVILY_API_KEY = "your-tavily-key"
 ```
 

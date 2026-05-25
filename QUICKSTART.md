@@ -13,8 +13,8 @@ pip install -r requirements.txt
 Create `.streamlit/secrets.toml` in your project root:
 
 ```toml
-# Minimum configuration (Bytez free tier only)
-BYTEZ_API_KEY = "444d1ac0a8b038cbe61ff956a8cdd700"
+# Minimum configuration
+BYTEZ_API_KEY = "your-bytez-api-key-here"
 TAVILY_API_KEY = "your-tavily-key-here"
 
 # Optional: Add more providers for better fallback
@@ -23,7 +23,7 @@ OPENROUTER_API_KEY = "your-openrouter-key"
 ```
 
 ### Get API Keys:
-- **Bytez** (Free): Already included above, or get your own at [bytez.com/api](https://bytez.com/api)
+- **Bytez** (Required): [bytez.com/api](https://bytez.com/api)
 - **Tavily** (Required): [tavily.com](https://tavily.com) - for research
 - **Google Gemini** (Optional): [aistudio.google.com](https://aistudio.google.com/app/apikeys)
 - **OpenRouter** (Optional): [openrouter.ai](https://openrouter.ai)
@@ -32,7 +32,7 @@ OPENROUTER_API_KEY = "your-openrouter-key"
 
 ```bash
 # Set environment variables (or use .streamlit/secrets.toml)
-export BYTEZ_API_KEY="444d1ac0a8b038cbe61ff956a8cdd700"
+export BYTEZ_API_KEY="your-bytez-api-key-here"
 export GOOGLE_API_KEY="your-key-here"  # optional
 export OPENROUTER_API_KEY="your-key-here"  # optional
 

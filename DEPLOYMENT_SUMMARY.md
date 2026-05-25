@@ -101,7 +101,7 @@ After reboot, check:
 
 Minimum required secrets:
 ```toml
-BYTEZ_API_KEY = "444d1ac0a8b038cbe61ff956a8cdd700"
+BYTEZ_API_KEY = "your-bytez-api-key-here"
 TAVILY_API_KEY = "your-tavily-key"
 ```
 
@@ -246,7 +246,7 @@ Once deployed, your app will be at:
 
 ## 💡 Pro Tips
 
-1. **Start Simple**: Use Bytez only (pre-configured)
+1. **Start Simple**: Use Bytez with your own API key
 2. **Add Quality**: Add Gemini key for better results
 3. **Add Variety**: Add OpenRouter for more models
 4. **Monitor Health**: Check Provider Monitor regularly

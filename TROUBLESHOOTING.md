@@ -54,7 +54,7 @@ TAVILY_API_KEY = "your-key-here"
 
 **Required Keys:**
 - `TAVILY_API_KEY` - For research
-- At least one AI provider key (BYTEZ_API_KEY is pre-configured)
+- At least one AI provider key, usually `BYTEZ_API_KEY`
 
 ---
 
@@ -73,7 +73,7 @@ RuntimeError: All AI providers failed
 **Solution:**
 1. Check Provider Monitor tab for status
 2. Verify at least one key is configured:
-   - `BYTEZ_API_KEY` (should be pre-configured)
+   - `BYTEZ_API_KEY`
    - `GOOGLE_API_KEY`
    - `OPENROUTER_API_KEY`
 3. Check Debug Panel for specific errors

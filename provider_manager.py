@@ -52,6 +52,7 @@ class ProviderManager:
         self.providers = self._initialize_providers()
         self.provider_rotation_index = 0
         self.call_history = []
+        self.bytez_chat_models_cache = None
         self.max_retries = 3
         self.retry_backoff_base = 2  # exponential backoff: 2^n seconds
         
@@ -171,6 +172,79 @@ class ProviderManager:
         "cohere/",
     )
 
+    def _get_bytez_chat_models(self, headers: Dict[str, str], timeout: int = 20) -> Optional[List[str]]:
+        """
+        Return chat model IDs available to the configured Bytez key.
+
+        A successful empty list means Bytez returned no chat models. None means the
+        list endpoint was temporarily unavailable, so callers can still try the
+        static fallback ladder.
+        """
+        if self.bytez_chat_models_cache is not None:
+            return self.bytez_chat_models_cache
+
+        response = None
+        try:
+            response = requests.get(
+                "https://api.bytez.com/models/v2/list/models",
+                params={"task": "chat"},
+                headers=headers,
+                timeout=timeout,
+            )
+            response.raise_for_status()
+            data = response.json()
+            model_ids = []
+            for item in data.get("output", []):
+                if not isinstance(item, dict):
+                    continue
+                model_id = item.get("modelId")
+                if model_id and item.get("task") == "chat":
+                    model_ids.append(model_id)
+
+            self.bytez_chat_models_cache = model_ids
+            return model_ids
+        except RequestsHTTPError:
+            status = response.status_code if response is not None else 0
+            if status in (401, 403):
+                raise
+            return None
+        except (RequestException, ValueError):
+            return None
+
+    def _build_bytez_model_ladder(self, requested_model: str, headers: Dict[str, str]) -> List[str]:
+        """Build a Bytez model ladder from requested, static, and key-visible chat models."""
+        available_models = self._get_bytez_chat_models(headers)
+        available_set = set(available_models or [])
+        candidates = [requested_model] + self.BYTEZ_FALLBACK_MODELS
+        ladder = []
+
+        for model in candidates:
+            if not model:
+                continue
+            if model.startswith(self.BYTEZ_OAI_PROVIDER_PREFIXES):
+                ladder.append(model)
+            elif not available_models or model in available_set:
+                ladder.append(model)
+
+        if available_models:
+            preferred = []
+            others = []
+            for model in available_models:
+                lowered = model.lower()
+                if any(token in lowered for token in ("qwen", "instruct", "chat")):
+                    preferred.append(model)
+                else:
+                    others.append(model)
+            ladder.extend(preferred + others)
+
+        deduped = []
+        seen = set()
+        for model in ladder:
+            if model not in seen:
+                seen.add(model)
+                deduped.append(model)
+        return deduped
+
     def _call_bytez_api(self, model: str, messages: List[Dict],
                         json_mode: bool = True, timeout: int = 120) -> str:
         """
@@ -208,13 +282,10 @@ class ProviderManager:
             "Content-Type": "application/json",
         }
 
-        # Build model ladder: requested model first, then open-source fallbacks (deduped)
-        seen = set()
-        ladder = []
-        for m in [model] + self.BYTEZ_FALLBACK_MODELS:
-            if m and m not in seen:
-                seen.add(m)
-                ladder.append(m)
+        # Build model ladder: requested model first, then key-visible chat models
+        # and static fallbacks. This avoids hard failing when Bytez removes or
+        # restricts a specific model ID for an account.
+        ladder = self._build_bytez_model_ladder(model, headers)
 
         last_exc = None
         for attempt_model in ladder:

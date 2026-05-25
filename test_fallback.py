@@ -31,6 +31,13 @@ def test_bytez_uses_native_chat_endpoint_for_qwen():
     manager = ProviderManager({"BYTEZ_API_KEY": "test-key"})
     calls = []
 
+    def fake_get(url, params, headers, timeout):
+        return _FakeResponse(200, {
+            "output": [
+                {"modelId": "Qwen/Qwen3-4B", "task": "chat"},
+            ]
+        })
+
     def fake_post(url, json, headers, timeout):
         calls.append({"url": url, "json": json, "headers": headers})
         return _FakeResponse(200, {"output": {"content": "ok"}})
@@ -38,7 +45,9 @@ def test_bytez_uses_native_chat_endpoint_for_qwen():
     import provider_manager as provider_module
 
     original_post = provider_module.requests.post
+    original_get = provider_module.requests.get
     provider_module.requests.post = fake_post
+    provider_module.requests.get = fake_get
     try:
         response = manager._call_bytez_api(
             "Qwen/Qwen3-4B",
@@ -47,6 +56,7 @@ def test_bytez_uses_native_chat_endpoint_for_qwen():
         )
     finally:
         provider_module.requests.post = original_post
+        provider_module.requests.get = original_get
 
     assert response == "ok"
     assert calls[0]["url"] == "https://api.bytez.com/models/v2/Qwen/Qwen3-4B"
@@ -60,6 +70,13 @@ def test_bytez_falls_back_from_openai_compatible_404():
     manager = ProviderManager({"BYTEZ_API_KEY": "test-key"})
     calls = []
 
+    def fake_get(url, params, headers, timeout):
+        return _FakeResponse(200, {
+            "output": [
+                {"modelId": "Qwen/Qwen3-4B", "task": "chat"},
+            ]
+        })
+
     def fake_post(url, json, headers, timeout):
         calls.append({"url": url, "json": json})
         if len(calls) == 1:
@@ -69,7 +86,9 @@ def test_bytez_falls_back_from_openai_compatible_404():
     import provider_manager as provider_module
 
     original_post = provider_module.requests.post
+    original_get = provider_module.requests.get
     provider_module.requests.post = fake_post
+    provider_module.requests.get = fake_get
     try:
         response = manager._call_bytez_api(
             "google/gemini-1.5-flash",
@@ -78,12 +97,49 @@ def test_bytez_falls_back_from_openai_compatible_404():
         )
     finally:
         provider_module.requests.post = original_post
+        provider_module.requests.get = original_get
 
     assert response == "fallback ok"
     assert calls[0]["url"] == "https://api.bytez.com/models/v2/openai/v1/chat/completions"
     assert calls[0]["json"]["model"] == "google/gemini-1.5-flash"
     assert calls[1]["url"] == f"https://api.bytez.com/models/v2/{manager.BYTEZ_DEFAULT_MODEL}"
     assert "model" not in calls[1]["json"]
+
+
+def test_bytez_uses_discovered_chat_model_when_qwen_is_unavailable():
+    """If Bytez says Qwen is not available for the key, use a listed chat model."""
+    manager = ProviderManager({"BYTEZ_API_KEY": "test-key"})
+    calls = []
+
+    def fake_get(url, params, headers, timeout):
+        return _FakeResponse(200, {
+            "output": [
+                {"modelId": "0-hero/Matter-0.1-Slim-7B-C", "task": "chat"},
+            ]
+        })
+
+    def fake_post(url, json, headers, timeout):
+        calls.append({"url": url, "json": json})
+        return _FakeResponse(200, {"output": {"content": "discovered ok"}})
+
+    import provider_manager as provider_module
+
+    original_post = provider_module.requests.post
+    original_get = provider_module.requests.get
+    provider_module.requests.post = fake_post
+    provider_module.requests.get = fake_get
+    try:
+        response = manager._call_bytez_api(
+            "Qwen/Qwen3-4B",
+            [{"role": "user", "content": "hello"}],
+            json_mode=False,
+        )
+    finally:
+        provider_module.requests.post = original_post
+        provider_module.requests.get = original_get
+
+    assert response == "discovered ok"
+    assert calls[0]["url"] == "https://api.bytez.com/models/v2/0-hero/Matter-0.1-Slim-7B-C"
 
 
 def test_provider_configuration():

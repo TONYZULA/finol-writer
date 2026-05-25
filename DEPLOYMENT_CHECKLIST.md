@@ -25,7 +25,7 @@ Your code has been successfully pushed to: `https://github.com/TONYZULA/finol-wr
 ```toml
 # MINIMUM REQUIRED SECRETS (copy this to Streamlit Cloud)
 
-BYTEZ_API_KEY = "444d1ac0a8b038cbe61ff956a8cdd700"
+BYTEZ_API_KEY = "your-bytez-api-key-here"
 TAVILY_API_KEY = "your-tavily-api-key-here"
 
 # OPTIONAL (for better quality and redundancy)
@@ -84,7 +84,7 @@ OPENROUTER_API_BASE = "https://openrouter.ai/api/v1"
 
 ### "All AI providers failed" error
 → Check that at least one of these is configured:
-  - `BYTEZ_API_KEY` (should be pre-configured)
+  - `BYTEZ_API_KEY`
   - `GOOGLE_API_KEY`
   - `OPENROUTER_API_KEY`
 
@@ -103,7 +103,7 @@ OPENROUTER_API_BASE = "https://openrouter.ai/api/v1"
 ## 📊 What to Expect
 
 ### With Minimum Configuration (Bytez only)
-- ✅ Works immediately with pre-configured key
+- ✅ Works with your own Bytez API key
 - ✅ Access to 70+ free models
 - ⚠️ May be slower than premium providers
 - ⚠️ No fallback if Bytez has issues

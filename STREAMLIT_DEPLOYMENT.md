@@ -23,8 +23,8 @@ git push origin main
 4. Add the following secrets:
 
 ```toml
-# Required - Bytez API (Free tier included)
-BYTEZ_API_KEY = "444d1ac0a8b038cbe61ff956a8cdd700"
+# Required - Bytez API
+BYTEZ_API_KEY = "your-bytez-api-key-here"
 
 # Required - Research
 TAVILY_API_KEY = "your-tavily-api-key-here"
@@ -49,9 +49,9 @@ OPENROUTER_API_BASE = "https://openrouter.ai/api/v1"
 
 ## 🔑 Getting API Keys
 
-### Bytez (Pre-configured)
-- Already included: `444d1ac0a8b038cbe61ff956a8cdd700`
-- Or get your own: [bytez.com/api](https://bytez.com/api)
+### Bytez (Required)
+- Get your API key: [bytez.com/api](https://bytez.com/api)
+- Replace `your-bytez-api-key-here` in Streamlit Secrets with the real key
 
 ### Tavily (Required)
 - Sign up: [tavily.com](https://tavily.com)

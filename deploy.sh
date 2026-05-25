@@ -79,7 +79,7 @@ if [ $? -eq 0 ]; then
     echo "3. Deploy your app"
     echo ""
     echo "🔑 Minimum secrets needed:"
-    echo "   BYTEZ_API_KEY = \"444d1ac0a8b038cbe61ff956a8cdd700\""
+    echo "   BYTEZ_API_KEY = \"your-bytez-api-key-here\""
     echo "   TAVILY_API_KEY = \"your-key\""
     echo "   TEMPLATED_API_KEY = \"your-key\""
     echo ""

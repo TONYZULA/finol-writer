@@ -17,7 +17,7 @@ streamlit run app.py
 
 ```toml
 # .streamlit/secrets.toml
-BYTEZ_API_KEY = "444d1ac0a8b038cbe61ff956a8cdd700"
+BYTEZ_API_KEY = "your-bytez-api-key-here"
 TAVILY_API_KEY = "your-tavily-key-here"
 ```
 
@@ -135,7 +135,7 @@ agent.provider_manager.get_available_providers()
 
 | Provider | Get Key From |
 |----------|--------------|
-| Bytez | [bytez.com/api](https://bytez.com/api) (pre-configured) |
+| Bytez | [bytez.com/api](https://bytez.com/api) |
 | Tavily | [tavily.com](https://tavily.com) |
 | Gemini | [aistudio.google.com](https://aistudio.google.com/app/apikeys) |
 | OpenRouter | [openrouter.ai](https://openrouter.ai) |
@@ -181,7 +181,7 @@ agent.provider_manager.get_available_providers()
 
 ## 💡 Pro Tips
 
-1. **Start with Bytez only** - Works out of the box with pre-configured key
+1. **Start with Bytez only** - Use your own Bytez key for the simplest setup
 2. **Add Gemini for quality** - Best results with Google's API
 3. **Add OpenRouter for variety** - 30+ free models to choose from
 4. **Monitor the dashboard** - Watch provider health in real-time

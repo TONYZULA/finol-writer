@@ -13,7 +13,7 @@
 #### Bytez Integration
 - **70+ Free Models**: Access to OpenAI, Anthropic, Google, Meta, and open-source models
 - **Direct API Implementation**: Native Bytez API support without LiteLLM dependency
-- **Free Tier Support**: Pre-configured API key for immediate use
+- **Free Tier Support**: Supports user-provided Bytez API keys
 - **Model Normalization**: Automatic model name adaptation for Bytez format
 
 #### Monitoring Dashboard
@@ -69,7 +69,7 @@
 - **Bad Requests**: JSON mode fallback for incompatible models
 
 #### User Experience
-- **No Configuration Required**: Works with Bytez free tier out of the box
+- **Simple Configuration**: Add a Bytez key and Tavily key to get started
 - **Visual Feedback**: Real-time status updates during generation
 - **Detailed Errors**: Specific guidance for each failure type
 - **Monitoring Tools**: Built-in dashboard for troubleshooting
@@ -169,7 +169,7 @@
 3. **Update secrets** (optional):
    ```toml
    # Add to .streamlit/secrets.toml
-   BYTEZ_API_KEY = "444d1ac0a8b038cbe61ff956a8cdd700"
+   BYTEZ_API_KEY = "your-bytez-api-key-here"
    ```
 
 4. **No code changes required**:

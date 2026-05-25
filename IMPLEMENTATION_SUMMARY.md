@@ -17,7 +17,7 @@ Successfully implemented an intelligent multi-provider AI fallback system for yo
 ### 2. Bytez Integration
 - **Direct API Implementation**: Native support for Bytez API (not through LiteLLM)
 - **70+ Free Models**: Access to OpenAI, Anthropic, Google, Meta, open-source models
-- **Pre-configured Key**: Free tier API key included: `444d1ac0a8b038cbe61ff956a8cdd700`
+- **Bytez Key Required**: Add your own API key in Streamlit Secrets
 - **Model Mapping**: Automatic conversion to Bytez model format
 
 ### 3. Monitoring Dashboard (`provider_dashboard.py`)
@@ -90,7 +90,7 @@ User Request → Try Gemini → Fails (rate limit)
 2. **Configure API keys** (minimum):
    ```toml
    # .streamlit/secrets.toml
-   BYTEZ_API_KEY = "444d1ac0a8b038cbe61ff956a8cdd700"
+   BYTEZ_API_KEY = "your-bytez-api-key-here"
    TAVILY_API_KEY = "your-tavily-key"
    ```
 
@@ -103,7 +103,7 @@ User Request → Try Gemini → Fails (rate limit)
 
 ```bash
 # Set environment variables
-export BYTEZ_API_KEY="444d1ac0a8b038cbe61ff956a8cdd700"
+export BYTEZ_API_KEY="your-bytez-api-key-here"
 
 # Run test suite
 python3 test_fallback.py
@@ -145,9 +145,9 @@ finol-automation/
 
 ## 🔧 Configuration Options
 
-### Minimum Configuration (Works Out of the Box)
+### Minimum Configuration
 ```toml
-BYTEZ_API_KEY = "444d1ac0a8b038cbe61ff956a8cdd700"  # Pre-configured
+BYTEZ_API_KEY = "your-bytez-api-key-here"
 TAVILY_API_KEY = "your-key"
 ```
 
@@ -155,7 +155,7 @@ TAVILY_API_KEY = "your-key"
 ```toml
 GOOGLE_API_KEY = "your-google-key"           # Best quality
 OPENROUTER_API_KEY = "your-openrouter-key"   # 30+ free models
-BYTEZ_API_KEY = "444d1ac0a8b038cbe61ff956a8cdd700"  # 70+ free models
+BYTEZ_API_KEY = "your-bytez-api-key-here"
 TAVILY_API_KEY = "your-tavily-key"
 ```
 
