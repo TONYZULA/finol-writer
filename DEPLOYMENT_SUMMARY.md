@@ -103,7 +103,6 @@ Minimum required secrets:
 ```toml
 BYTEZ_API_KEY = "444d1ac0a8b038cbe61ff956a8cdd700"
 TAVILY_API_KEY = "your-tavily-key"
-TEMPLATED_API_KEY = "your-templated-key"
 ```
 
 Optional (recommended):

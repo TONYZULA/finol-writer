@@ -116,7 +116,7 @@ class FinolAutomation:
             return {"error": "Failed to parse JSON", "raw_content": str(text)}
 
     def get_default_cover_image_bytes(self):
-        """Load the hardcoded cover image from the repo."""
+        """Load the legacy bundled cover image from the repo."""
         import os
         base_dir = os.path.dirname(os.path.abspath(__file__))
         image_path = os.path.join(base_dir, "assets", "cover.png")
@@ -126,7 +126,15 @@ class FinolAutomation:
         with open(image_path, "rb") as f:
             return f.read()
 
-    def upload_to_wordpress(self, title, content, image_bytes, wp_config):
+    def upload_to_wordpress(
+        self,
+        title,
+        content,
+        image_bytes,
+        wp_config,
+        image_filename="cover.jpg",
+        image_content_type="image/jpeg",
+    ):
         """Upload blog post with cover image to WordPress."""
         # Clean and validate credentials
         user = str(wp_config.get('user', '')).strip()
@@ -151,9 +159,11 @@ class FinolAutomation:
         if image_bytes:
             # Upload media (cover image)
             media_url = f"{base_url}/wp-json/wp/v2/media"
+            safe_filename = os.path.basename(image_filename or "cover.jpg").replace('"', "")
+            content_type = image_content_type or "image/jpeg"
             headers = {
-                "Content-Disposition": 'attachment; filename="cover.jpg"',
-                "Content-Type": "image/jpeg"
+                "Content-Disposition": f'attachment; filename="{safe_filename}"',
+                "Content-Type": content_type
             }
             
             try:

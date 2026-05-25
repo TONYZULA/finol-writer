@@ -9,6 +9,7 @@ Reliable WordPress blog automation using Bytez models with built-in retries and 
 - **Real-Time Monitoring**: Track provider health and call history
 - **70+ Models Available**: OpenAI, Anthropic, Google, Meta, and open-source models via Bytez
 - **WordPress Integration**: Direct publishing
+- **Custom Cover Uploads**: Choose a featured image per post before publishing
 - **Research-Powered Content**: Uses Tavily for real-time web research
 
 ## 📋 Table of Contents

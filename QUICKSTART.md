@@ -16,7 +16,6 @@ Create `.streamlit/secrets.toml` in your project root:
 # Minimum configuration (Bytez free tier only)
 BYTEZ_API_KEY = "444d1ac0a8b038cbe61ff956a8cdd700"
 TAVILY_API_KEY = "your-tavily-key-here"
-TEMPLATED_API_KEY = "your-templated-key-here"
 
 # Optional: Add more providers for better fallback
 GOOGLE_API_KEY = "your-google-api-key"
@@ -26,7 +25,6 @@ OPENROUTER_API_KEY = "your-openrouter-key"
 ### Get API Keys:
 - **Bytez** (Free): Already included above, or get your own at [bytez.com/api](https://bytez.com/api)
 - **Tavily** (Required): [tavily.com](https://tavily.com) - for research
-- **Templated** (Required): [templated.io](https://templated.io) - for cover images
 - **Google Gemini** (Optional): [aistudio.google.com](https://aistudio.google.com/app/apikeys)
 - **OpenRouter** (Optional): [openrouter.ai](https://openrouter.ai)
 
@@ -237,7 +235,6 @@ export GOOGLE_API_KEY="..."
 export OPENROUTER_API_KEY="..."
 export BYTEZ_API_KEY="..."
 export TAVILY_API_KEY="..."
-export TEMPLATED_API_KEY="..."
 ```
 
 ---

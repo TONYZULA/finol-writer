@@ -92,7 +92,6 @@ User Request → Try Gemini → Fails (rate limit)
    # .streamlit/secrets.toml
    BYTEZ_API_KEY = "444d1ac0a8b038cbe61ff956a8cdd700"
    TAVILY_API_KEY = "your-tavily-key"
-   TEMPLATED_API_KEY = "your-templated-key"
    ```
 
 3. **Run the app**:
@@ -150,7 +149,6 @@ finol-automation/
 ```toml
 BYTEZ_API_KEY = "444d1ac0a8b038cbe61ff956a8cdd700"  # Pre-configured
 TAVILY_API_KEY = "your-key"
-TEMPLATED_API_KEY = "your-key"
 ```
 
 ### Recommended Configuration (Best Reliability)
@@ -159,7 +157,6 @@ GOOGLE_API_KEY = "your-google-key"           # Best quality
 OPENROUTER_API_KEY = "your-openrouter-key"   # 30+ free models
 BYTEZ_API_KEY = "444d1ac0a8b038cbe61ff956a8cdd700"  # 70+ free models
 TAVILY_API_KEY = "your-tavily-key"
-TEMPLATED_API_KEY = "your-templated-key"
 ```
 
 ### Provider Priority (Default)

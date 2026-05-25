@@ -54,7 +54,6 @@ TAVILY_API_KEY = "your-key-here"
 
 **Required Keys:**
 - `TAVILY_API_KEY` - For research
-- `TEMPLATED_API_KEY` - For cover images
 - At least one AI provider key (BYTEZ_API_KEY is pre-configured)
 
 ---
@@ -122,18 +121,18 @@ Error uploading to WordPress
 
 ---
 
-### 7. Cover Image Generation Fails
+### 7. Cover Image Upload Fails
 
 **Error:**
 ```
-Error generating cover image
+Cover image upload failed
 ```
 
 **Solutions:**
-1. Verify `TEMPLATED_API_KEY` is configured
-2. Check Templated.io account has quota
-3. Verify template ID is correct
-4. Try regenerating
+1. Upload a JPG, PNG, or WebP file in the sidebar before publishing
+2. Verify your WordPress user has media upload permissions
+3. Confirm the WordPress REST API is enabled
+4. Try publishing without a cover image if the post content is urgent
 
 ---
 

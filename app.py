@@ -1,5 +1,4 @@
 import streamlit as st
-import os
 from automation import FinolAutomation
 from provider_dashboard import (
     show_provider_status,
@@ -42,12 +41,17 @@ with st.sidebar:
     show_fallback_info()
 
     st.markdown("---")
-    st.subheader("Default Cover Image")
-    cover_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "cover.png")
-    if os.path.exists(cover_path):
-        st.image(cover_path, caption="Default cover used for every post", use_column_width=True)
+    st.subheader("Cover Image")
+    cover_image = st.file_uploader(
+        "Upload Featured Image",
+        type=["jpg", "jpeg", "png", "webp"],
+        help="Optional. This image will be uploaded as the WordPress featured image.",
+        key="cover_image_upload",
+    )
+    if cover_image:
+        st.image(cover_image, caption=cover_image.name, use_column_width=True)
     else:
-        st.warning("Default cover image not found at assets/cover.png")
+        st.info("No cover image selected. Publishing will continue without a featured image.")
 
 st.title("🚀 FINOL Blog Writer")
 
@@ -149,9 +153,17 @@ with tab1:
                 st.session_state.agent = agent
                 with st.spinner("Uploading Media & Post..."):
                     try:
-                        # Upload to WordPress with hardcoded cover image
-                        img = agent.get_default_cover_image_bytes()
-                        link = agent.upload_to_wordpress(topic, edited_text, img, wp_config)
+                        img = cover_image.getvalue() if cover_image else None
+                        image_name = cover_image.name if cover_image else None
+                        image_type = cover_image.type if cover_image else None
+                        link = agent.upload_to_wordpress(
+                            topic,
+                            edited_text,
+                            img,
+                            wp_config,
+                            image_filename=image_name,
+                            image_content_type=image_type,
+                        )
                         st.success(f"Published successfully! [View Post]({link})")
                             
                     except Exception as e:

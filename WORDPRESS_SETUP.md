@@ -168,14 +168,13 @@ Post creation failed: 403 - Forbidden
 **Symptom:** Post publishes but without featured image
 
 **Causes:**
-- Templated API key missing or invalid
-- Image generation failed
+- Unsupported image type or oversized file
 - Media upload permissions issue
 
 **Solutions:**
-1. Verify `TEMPLATED_API_KEY` in Streamlit Secrets
-2. Check Templated.io account has quota
-3. Verify WordPress user can upload media
+1. Upload a JPG, PNG, or WebP cover image in the sidebar
+2. Verify WordPress user can upload media
+3. Try a smaller image file if your host blocks large uploads
 4. Post will still publish without image (by design)
 
 ---

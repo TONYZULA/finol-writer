@@ -19,7 +19,6 @@ streamlit run app.py
 # .streamlit/secrets.toml
 BYTEZ_API_KEY = "444d1ac0a8b038cbe61ff956a8cdd700"
 TAVILY_API_KEY = "your-tavily-key-here"
-TEMPLATED_API_KEY = "your-templated-key-here"
 ```
 
 ## 🔄 How Fallback Works
@@ -138,7 +137,6 @@ agent.provider_manager.get_available_providers()
 |----------|--------------|
 | Bytez | [bytez.com/api](https://bytez.com/api) (pre-configured) |
 | Tavily | [tavily.com](https://tavily.com) |
-| Templated | [templated.io](https://templated.io) |
 | Gemini | [aistudio.google.com](https://aistudio.google.com/app/apikeys) |
 | OpenRouter | [openrouter.ai](https://openrouter.ai) |
 

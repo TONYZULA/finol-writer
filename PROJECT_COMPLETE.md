@@ -173,7 +173,6 @@ Minimum configuration (works immediately):
 ```toml
 BYTEZ_API_KEY = "444d1ac0a8b038cbe61ff956a8cdd700"  # Pre-configured!
 TAVILY_API_KEY = "your-tavily-key"
-TEMPLATED_API_KEY = "your-templated-key"
 ```
 
 ### Step 3: Test the System (1 minute)
@@ -220,7 +219,6 @@ streamlit run app.py
 - [ ] `.streamlit/secrets.toml` created
 - [ ] At least BYTEZ_API_KEY configured
 - [ ] TAVILY_API_KEY added
-- [ ] TEMPLATED_API_KEY added
 
 ### Testing
 - [ ] Test suite runs: `python3 test_fallback.py`

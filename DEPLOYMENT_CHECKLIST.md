@@ -27,7 +27,6 @@ Your code has been successfully pushed to: `https://github.com/TONYZULA/finol-wr
 
 BYTEZ_API_KEY = "444d1ac0a8b038cbe61ff956a8cdd700"
 TAVILY_API_KEY = "your-tavily-api-key-here"
-TEMPLATED_API_KEY = "your-templated-api-key-here"
 
 # OPTIONAL (for better quality and redundancy)
 GOOGLE_API_KEY = "your-google-api-key-here"
@@ -46,12 +45,6 @@ OPENROUTER_API_BASE = "https://openrouter.ai/api/v1"
 - [ ] Sign up for free account
 - [ ] Get API key from dashboard
 - [ ] Copy to Streamlit secrets as `TAVILY_API_KEY`
-
-**Templated API** (Required for cover images)
-- [ ] Go to [templated.io](https://templated.io)
-- [ ] Sign up for account
-- [ ] Get API key from dashboard
-- [ ] Copy to Streamlit secrets as `TEMPLATED_API_KEY`
 
 #### Optional Keys (Recommended):
 
@@ -85,8 +78,9 @@ OPENROUTER_API_BASE = "https://openrouter.ai/api/v1"
 ### "Missing TAVILY_API_KEY" error
 → Add `TAVILY_API_KEY` to Streamlit Cloud secrets
 
-### "Missing TEMPLATED_API_KEY" error
-→ Add `TEMPLATED_API_KEY` to Streamlit Cloud secrets
+### No featured image on WordPress
+→ Upload a cover image in the sidebar before publishing
+→ Verify your WordPress user can upload media
 
 ### "All AI providers failed" error
 → Check that at least one of these is configured:
@@ -199,4 +193,4 @@ Or your custom Streamlit Cloud URL.
 
 **Good luck with your deployment!** 🎉
 
-*Remember: The Bytez API key is pre-configured, so you only need to add TAVILY_API_KEY and TEMPLATED_API_KEY to get started!*
+*Remember: add your real `BYTEZ_API_KEY` and `TAVILY_API_KEY` in Streamlit Cloud Secrets before generating drafts.*

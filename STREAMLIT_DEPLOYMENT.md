@@ -26,9 +26,8 @@ git push origin main
 # Required - Bytez API (Free tier included)
 BYTEZ_API_KEY = "444d1ac0a8b038cbe61ff956a8cdd700"
 
-# Required - Research & Images
+# Required - Research
 TAVILY_API_KEY = "your-tavily-api-key-here"
-TEMPLATED_API_KEY = "your-templated-api-key-here"
 
 # Optional - Better quality and redundancy
 GOOGLE_API_KEY = "your-google-api-key-here"
@@ -58,10 +57,6 @@ OPENROUTER_API_BASE = "https://openrouter.ai/api/v1"
 - Sign up: [tavily.com](https://tavily.com)
 - Free tier: 1000 searches/month
 
-### Templated (Required)
-- Sign up: [templated.io](https://templated.io)
-- Get API key from dashboard
-
 ### Google Gemini (Optional)
 - Get key: [aistudio.google.com/app/apikeys](https://aistudio.google.com/app/apikeys)
 - Free tier available
@@ -74,7 +69,7 @@ OPENROUTER_API_BASE = "https://openrouter.ai/api/v1"
 
 - [ ] Code pushed to GitHub
 - [ ] Secrets configured on Streamlit Cloud
-- [ ] At least BYTEZ_API_KEY, TAVILY_API_KEY, TEMPLATED_API_KEY added
+- [ ] `BYTEZ_API_KEY` and `TAVILY_API_KEY` added
 - [ ] App deployed successfully
 - [ ] Test article generation works
 - [ ] Provider Monitor shows status
