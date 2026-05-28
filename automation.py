@@ -14,9 +14,16 @@ class FinolAutomation:
         
         # Safe loading from st.secrets to prevent blank screen crashes
         self.keys = {
-            "TAVILY_API_KEY": st.secrets.get("TAVILY_API_KEY", ""),
-            "BYTEZ_API_KEY": st.secrets.get("BYTEZ_API_KEY", ""),
-            "GOOGLE_API_KEY": st.secrets.get("GOOGLE_API_KEY", ""),
+            "TAVILY_API_KEY":    st.secrets.get("TAVILY_API_KEY", ""),
+            "TEMPLATED_API_KEY": st.secrets.get("TEMPLATED_API_KEY", ""),
+            # AIML API – 3 independent keys for rolling fallback
+            "AIML_API_KEY_1":    st.secrets.get("AIML_API_KEY_1", ""),
+            "AIML_API_KEY_2":    st.secrets.get("AIML_API_KEY_2", ""),
+            "AIML_API_KEY_3":    st.secrets.get("AIML_API_KEY_3", ""),
+            # Gemini – 2 independent keys
+            "GOOGLE_API_KEY":    st.secrets.get("GOOGLE_API_KEY", ""),
+            "GOOGLE_API_KEY_2":  st.secrets.get("GOOGLE_API_KEY_2", ""),
+            # Optional
             "OPENROUTER_API_KEY": st.secrets.get("OPENROUTER_API_KEY", ""),
         }
         

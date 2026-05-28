@@ -1,14 +1,24 @@
 """
-AI provider manager for blog automation.
-Bytez-only implementation with health tracking and retry logic.
+Multi-provider AI fallback system for blog automation.
+Providers (in fallback order):
+  1. AIML API – key 1  (auto / da00e37a...)
+  2. AIML API – key 2  (muli / 036b493b...)
+  3. AIML API – key 3  (harsi / 768f08a5...)
+  4. Gemini – key 1    (AQ.Ab8RN6...)
+  5. Gemini – key 2    (AIzaSyCiL...)
+  6. OpenRouter        (optional, if key present)
+
+AIML API is fully OpenAI-compatible:
+  Base URL : https://api.aimlapi.com/v1
+  Auth     : Bearer <key>
 """
 
 import os
-import json
 import time
+import json
 import requests
 import streamlit as st
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 from litellm import completion
 from litellm.exceptions import (
     APIConnectionError,
@@ -17,566 +27,321 @@ from litellm.exceptions import (
     RateLimitError,
     APIError,
 )
-from requests.exceptions import HTTPError as RequestsHTTPError, RequestException
+
+
+# ---------------------------------------------------------------------------
+# Default models per provider
+# ---------------------------------------------------------------------------
+AIML_DEFAULT_MODEL  = "google/gemini-2.0-flash"   # fast, reliable on AIML
+GEMINI_DEFAULT_MODEL = "gemini/gemini-2.0-flash"   # litellm prefix
+OPENROUTER_DEFAULT  = "openrouter/google/gemma-3-4b-it:free"
 
 
 class ProviderConfig:
-    """Configuration for each AI provider."""
-    
-    def __init__(self, name: str, api_key_env: str, base_url: Optional[str] = None):
-        self.name = name
-        self.api_key_env = api_key_env
-        self.base_url = base_url
-        self.api_key = os.environ.get(api_key_env, "")
-        self.is_available = bool(self.api_key)
+    """Holds runtime state for one provider slot."""
+
+    def __init__(self, name: str, api_key: str, base_url: Optional[str] = None):
+        self.name          = name
+        self.api_key       = api_key
+        self.base_url      = base_url
+        self.is_available  = bool(api_key)
         self.failure_count = 0
-        self.last_error = None
+        self.last_error    = None
         self.last_error_time = None
 
 
 class ProviderManager:
     """
-    Manages multiple AI providers with intelligent fallback and rotation.
-    Tracks provider health and automatically switches on failures.
+    Manages multiple AI provider slots with intelligent fallback and rotation.
+    Each AIML key is treated as an independent provider slot so that when one
+    key is rate-limited the next key is tried automatically.
     """
-    
+
     def __init__(self, secrets_dict: Dict[str, str]):
-        """
-        Initialize provider manager with API keys from secrets.
-        
-        Args:
-            secrets_dict: Dictionary containing API keys and configuration
-        """
         self.secrets = secrets_dict
-        self._setup_environment()
-        self.providers = self._initialize_providers()
-        self.provider_rotation_index = 0
-        self.call_history = []
-        self.bytez_chat_models_cache = None
-        self.max_retries = 3
-        self.retry_backoff_base = 2  # exponential backoff: 2^n seconds
-        
-    def _setup_environment(self):
-        """Set up environment variables for providers."""
-        os.environ["BYTEZ_API_KEY"] = self.secrets.get("BYTEZ_API_KEY", "")
-        os.environ["GOOGLE_API_KEY"] = self.secrets.get("GOOGLE_API_KEY", "")
-        os.environ["OPENROUTER_API_KEY"] = self.secrets.get("OPENROUTER_API_KEY", "")
-    
-    def _initialize_providers(self) -> List[ProviderConfig]:
-        """Initialize all available providers based on keys."""
-        providers = []
-        
-        # Bytez (Native)
-        if self.secrets.get("BYTEZ_API_KEY"):
-            providers.append(ProviderConfig("bytez", "BYTEZ_API_KEY"))
-            
-        # Google (Gemini)
-        if self.secrets.get("GOOGLE_API_KEY"):
-            providers.append(ProviderConfig("google", "GOOGLE_API_KEY"))
-            
-        # OpenRouter
-        if self.secrets.get("OPENROUTER_API_KEY"):
-            providers.append(ProviderConfig("openrouter", "OPENROUTER_API_KEY", "https://openrouter.ai/api/v1"))
-            
+        self.call_history: List[Dict] = []
+        self.retry_backoff_base = 2   # seconds; wait = base^n, capped at 10 s
+        self.providers = self._build_providers()
+
+    # ------------------------------------------------------------------
+    # Provider initialisation
+    # ------------------------------------------------------------------
+
+    def _build_providers(self) -> List[ProviderConfig]:
+        """Build ordered provider list from secrets."""
+        providers: List[ProviderConfig] = []
+
+        # ── AIML API keys (3 independent slots) ──────────────────────
+        for slot, env_key in [
+            ("aiml_1", "AIML_API_KEY_1"),
+            ("aiml_2", "AIML_API_KEY_2"),
+            ("aiml_3", "AIML_API_KEY_3"),
+        ]:
+            key = self.secrets.get(env_key, "")
+            if key:
+                providers.append(
+                    ProviderConfig(slot, key, "https://api.aimlapi.com/v1")
+                )
+
+        # ── Gemini keys (2 independent slots via litellm) ────────────
+        for slot, env_key in [
+            ("gemini_1", "GOOGLE_API_KEY"),
+            ("gemini_2", "GOOGLE_API_KEY_2"),
+        ]:
+            key = self.secrets.get(env_key, "")
+            if key:
+                os.environ[env_key] = key          # litellm reads env vars
+                providers.append(ProviderConfig(slot, key))
+
+        # ── OpenRouter (optional) ─────────────────────────────────────
+        or_key = self.secrets.get("OPENROUTER_API_KEY", "")
+        if or_key:
+            os.environ["OPENROUTER_API_KEY"] = or_key
+            providers.append(
+                ProviderConfig("openrouter", or_key, "https://openrouter.ai/api/v1")
+            )
+
         return providers
-    
+
+    # ------------------------------------------------------------------
+    # Public helpers
+    # ------------------------------------------------------------------
+
     def get_available_providers(self) -> List[str]:
-        """Get list of available provider names."""
         return [p.name for p in self.providers if p.is_available]
-    
+
     def get_provider_status(self) -> Dict:
-        """Get health status of all providers."""
         return {
             p.name: {
-                "available": p.is_available,
-                "failures": p.failure_count,
-                "last_error": p.last_error,
+                "available":       p.is_available,
+                "failures":        p.failure_count,
+                "last_error":      p.last_error,
                 "last_error_time": p.last_error_time,
             }
             for p in self.providers
         }
-    
-    def _get_next_provider(self, exclude_providers: List[str] = None) -> Optional[ProviderConfig]:
+
+    def get_call_history(self, limit: int = 20) -> List[Dict]:
+        return self.call_history[-limit:]
+
+    # ------------------------------------------------------------------
+    # Core call
+    # ------------------------------------------------------------------
+
+    def ai_call(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        preferred_model: str = None,
+        json_mode: bool = True,
+    ) -> str:
         """
-        Get next available provider in rotation, excluding failed ones.
-        
-        Args:
-            exclude_providers: List of provider names to skip
-            
-        Returns:
-            Next available ProviderConfig or None if all failed
-        """
-        exclude_providers = exclude_providers or []
-        available = [
-            p for p in self.providers 
-            if p.is_available and p.name not in exclude_providers
-        ]
-        
-        if not available:
-            return None
-        
-        # Rotate through available providers
-        self.provider_rotation_index = (self.provider_rotation_index + 1) % len(available)
-        return available[self.provider_rotation_index]
-    
-    def _normalize_model_for_provider(self, model: str, provider: str) -> str:
-        """
-        Normalize model name for specific provider.
-        
-        Args:
-            model: Original model identifier
-            provider: Target provider name
-            
-        Returns:
-            Normalized model name for the provider
-        """
-        if provider == "bytez":
-            # Default to a reliable open-source model that works with Bytez key only.
-            if not model or model == "default":
-                return self.BYTEZ_DEFAULT_MODEL
-            return model
-            
-        if provider == "google":
-            if not model or "gemini" not in model.lower():
-                return "gemini/gemini-1.5-flash"
-            # litellm uses 'gemini/' prefix for Google
-            if model.startswith("google/"):
-                return model.replace("google/", "gemini/", 1)
-            if not model.startswith("gemini/"):
-                return f"gemini/{model}"
-            return model
-            
-        if provider == "openrouter":
-            if not model or model == "default":
-                return "openrouter/google/gemini-flash-1.5"
-            if not model.startswith("openrouter/"):
-                return f"openrouter/{model}"
-            return model
-        
-        return model
-    
-    # Open-source fallback ladder — these work with a Bytez key only (no provider key needed).
-    # Closed-source models (google/, openai/, anthropic/) require an additional provider-key header
-    # which we don't manage here, so keep this list open-source only.
-    BYTEZ_DEFAULT_MODEL = "Qwen/Qwen3-4B"
-    BYTEZ_FALLBACK_MODELS = [
-        BYTEZ_DEFAULT_MODEL,
-        "Qwen/Qwen3-1.7B",
-        "Qwen/Qwen3-0.6B",
-    ]
-    BYTEZ_OAI_PROVIDER_PREFIXES = (
-        "openai/",
-        "anthropic/",
-        "google/",
-        "mistral/",
-        "cohere/",
-    )
-
-    def _get_bytez_chat_models(self, headers: Dict[str, str], timeout: int = 20) -> Optional[List[str]]:
-        """
-        Return chat model IDs available to the configured Bytez key.
-
-        A successful empty list means Bytez returned no chat models. None means the
-        list endpoint was temporarily unavailable, so callers can still try the
-        static fallback ladder.
-        """
-        if self.bytez_chat_models_cache is not None:
-            return self.bytez_chat_models_cache
-
-        response = None
-        try:
-            response = requests.get(
-                "https://api.bytez.com/models/v2/list/models",
-                params={"task": "chat"},
-                headers=headers,
-                timeout=timeout,
-            )
-            response.raise_for_status()
-            data = response.json()
-            model_ids = []
-            for item in data.get("output", []):
-                if not isinstance(item, dict):
-                    continue
-                model_id = item.get("modelId")
-                if model_id and item.get("task") == "chat":
-                    model_ids.append(model_id)
-
-            self.bytez_chat_models_cache = model_ids
-            return model_ids
-        except RequestsHTTPError:
-            status = response.status_code if response is not None else 0
-            if status in (401, 403):
-                raise
-            return None
-        except (RequestException, ValueError):
-            return None
-
-    def _build_bytez_model_ladder(self, requested_model: str, headers: Dict[str, str]) -> List[str]:
-        """Build a Bytez model ladder from requested, static, and key-visible chat models."""
-        available_models = self._get_bytez_chat_models(headers)
-        available_set = set(available_models or [])
-        candidates = [requested_model] + self.BYTEZ_FALLBACK_MODELS
-        ladder = []
-
-        for model in candidates:
-            if not model:
-                continue
-            if model.startswith(self.BYTEZ_OAI_PROVIDER_PREFIXES):
-                ladder.append(model)
-            elif not available_models or model in available_set:
-                ladder.append(model)
-
-        if available_models:
-            preferred = []
-            others = []
-            for model in available_models:
-                lowered = model.lower()
-                if any(token in lowered for token in ("qwen", "instruct", "chat")):
-                    preferred.append(model)
-                else:
-                    others.append(model)
-            ladder.extend(preferred + others)
-
-        deduped = []
-        seen = set()
-        for model in ladder:
-            if model not in seen:
-                seen.add(model)
-                deduped.append(model)
-        return deduped
-
-    def _call_bytez_api(self, model: str, messages: List[Dict],
-                        json_mode: bool = True, timeout: int = 120) -> str:
-        """
-        Direct call to the native Bytez API.
-
-        Primary Bytez endpoint format:
-            POST https://api.bytez.com/models/v2/{org}/{model-name}
-        Closed-source best-effort endpoint:
-            POST https://api.bytez.com/models/v2/openai/v1/chat/completions
-        Auth:
-            Authorization: {api_key}   (no 'Bearer' prefix)
-        Payload:
-            { "messages": [...], "stream": false, "params": {...} }
-        Response:
-            Native Bytez output, or OpenAI-compatible choices.
-
-        On 4xx errors raises immediately. On 5xx retries up to 2 times
-        with backoff, then moves to the next model in BYTEZ_FALLBACK_MODELS.
-
-        Args:
-            model: Bytez model identifier in 'org/model-name' format
-            messages: Message list for the API
-            json_mode: Unused (kept for interface compatibility)
-            timeout: Request timeout in seconds
-
-        Returns:
-            Response content string
-        """
-        from requests.exceptions import HTTPError as RequestsHTTPError
-
-        api_key = self.secrets.get("BYTEZ_API_KEY", "")
-        # Bytez uses plain key — no 'Bearer' prefix
-        headers = {
-            "Authorization": api_key,
-            "Content-Type": "application/json",
-        }
-
-        # Build model ladder: requested model first, then key-visible chat models
-        # and static fallbacks. This avoids hard failing when Bytez removes or
-        # restricts a specific model ID for an account.
-        ladder = self._build_bytez_model_ladder(model, headers)
-
-        last_exc = None
-        for attempt_model in ladder:
-            requests_to_try = []
-            if attempt_model.startswith(self.BYTEZ_OAI_PROVIDER_PREFIXES):
-                requests_to_try.append((
-                    "https://api.bytez.com/models/v2/openai/v1/chat/completions",
-                    {
-                        "model": attempt_model,
-                        "messages": messages,
-                        "max_completion_tokens": 2048,
-                        "stream": False,
-                    },
-                ))
-            else:
-                requests_to_try.append((
-                    f"https://api.bytez.com/models/v2/{attempt_model}",
-                    {
-                        "messages": messages,
-                        "stream": False,
-                        "params": {
-                            "max_length": 2048,
-                        },
-                    },
-                ))
-
-            for url, payload in requests_to_try:
-                for attempt in range(3):  # up to 3 tries per endpoint/model pair
-                    try:
-                        response = requests.post(
-                            url,
-                            json=payload,
-                            headers=headers,
-                            timeout=timeout,
-                        )
-                        response.raise_for_status()
-                        data = response.json()
-                        
-                        # 1. Check for native Bytez 'output' field
-                        if "output" in data:
-                            output = data["output"]
-                            # If output is a dictionary (common in Chat models), extract content
-                            if isinstance(output, dict):
-                                if "content" in output:
-                                    return output["content"]
-                                if "text" in output:
-                                    return output["text"]
-                                if "message" in output and isinstance(output["message"], dict):
-                                    return output["message"].get("content", str(output))
-                                return str(output)
-                            return str(output)
-                            
-                        # 2. Check for OpenAI-style 'choices'
-                        if "choices" in data and len(data["choices"]) > 0:
-                            choice = data["choices"][0]
-                            if "message" in choice and isinstance(choice["message"], dict):
-                                return choice["message"].get("content", "")
-                            if "text" in choice:
-                                return choice["text"]
-
-                        # 3. Last resort: serialized JSON
-                        return json.dumps(data)
-                    except RequestsHTTPError as e:
-                        status = e.response.status_code if e.response is not None else 0
-                        if status < 500:
-                            # 4xx — no point retrying this endpoint/model pair
-                            last_exc = e
-                            break
-                        # 5xx or specific container errors — retry with backoff or skip
-                        last_exc = e
-                        
-                        # If it's the "unable to load model" container error, skip to next model faster
-                        if response is not None and "unable to load the model" in response.text:
-                            break # Go to next model in ladder
-
-                        if attempt < 2:
-                            time.sleep(2 ** attempt)  # 1s then 2s
-                        else:
-                            break  # exhausted retries for this endpoint/model pair
-                    except Exception as e:
-                        last_exc = e
-                        raise  # non-HTTP errors (network, JSON parse) propagate immediately
-
-        # All models and retries exhausted
-        raise last_exc
-    
-    def ai_call(self, system_prompt: str, user_prompt: str, 
-                preferred_model: str = None, json_mode: bool = True) -> str:
-        """
-        Make AI call with Bytez provider and retry logic.
-        
-        Args:
-            system_prompt: System message for the AI
-            user_prompt: User message for the AI
-            preferred_model: Preferred model to try first
-            json_mode: Whether to request JSON response
-            
-        Returns:
-            Response content string
-            
-        Raises:
-            RuntimeError: If all providers fail
+        Try each provider in order until one succeeds.
+        Returns the raw content string (caller handles JSON parsing).
         """
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
+            {"role": "user",   "content": user_prompt},
         ]
-        
-        failed_providers = []
+
+        failed: List[str] = []
         last_error = None
-        
-        # Try providers in order: preferred first, then rotation
-        providers_to_try = []
-        if preferred_model:
-            for p in self.providers:
-                if p.is_available and p.name in preferred_model.lower():
-                    providers_to_try.append(p)
-        
-        # Add remaining available providers
-        for p in self.providers:
-            if p.is_available and p not in providers_to_try:
-                providers_to_try.append(p)
-        
-        for provider in providers_to_try:
+
+        for provider in self.providers:
+            if not provider.is_available:
+                continue
+
             try:
-                normalized_model = self._normalize_model_for_provider(
-                    preferred_model or "default", provider.name
+                content = self._call_provider(
+                    provider, messages, preferred_model, json_mode
                 )
-                
-                if provider.name == "bytez":
-                    content = self._call_bytez_api(
-                        normalized_model, messages, json_mode
-                    )
-                else:
-                    response = completion(
-                        model=normalized_model,
-                        messages=messages,
-                        response_format={"type": "json_object"} if json_mode else None,
-                        base_url=provider.base_url,
-                        timeout=60,
-                    )
-                    content = response.choices[0].message.content or ""
-                
-                # Success: reset failure count
+
+                # ── success ──────────────────────────────────────────
                 provider.failure_count = 0
-                provider.last_error = None
-                
-                # Log successful call
-                self.call_history.append({
-                    "provider": provider.name,
-                    "model": normalized_model,
-                    "status": "success",
-                    "timestamp": time.time(),
-                })
-                
+                provider.last_error    = None
+                self._log("success", provider.name,
+                          self._model_for(provider, preferred_model))
                 return content
-            
-            except (APIConnectionError, RateLimitError, APIError) as e:
-                provider.failure_count += 1
-                provider.last_error = str(e)
-                provider.last_error_time = time.time()
-                failed_providers.append(provider.name)
+
+            except Exception as e:
                 last_error = e
-                
-                # Log failed attempt
-                self.call_history.append({
-                    "provider": provider.name,
-                    "status": "failed",
-                    "error": str(e),
-                    "timestamp": time.time(),
-                })
-                
-                # Exponential backoff before next attempt
-                if provider != providers_to_try[-1]:
-                    wait_time = self.retry_backoff_base ** len(failed_providers)
-                    time.sleep(min(wait_time, 10))  # Cap at 10 seconds
-                
-                continue
-            
-            except RequestsHTTPError as e:
-                # Raised by response.raise_for_status() in _call_bytez_api
-                status_code = e.response.status_code if e.response is not None else 0
-                error_msg = f"HTTP {status_code}: {str(e)}"
-                
-                if status_code in (401, 403):
-                    # For Bytez, 403 often means the specific model is restricted for free tier.
-                    # Only disable provider if it's a 401 (Unauthorized) or if it's a 403 on multiple models.
-                    if status_code == 401:
-                        provider.is_available = False
-                        provider.last_error = f"Auth failed (401): {error_msg}"
-                    else:
-                        # 403: Model restricted. Don't disable provider, just mark failure.
-                        provider.failure_count += 1
-                        provider.last_error = f"Model restricted (403): {error_msg}"
-                        failed_providers.append(provider.name)
-                        last_error = e
-                        
-                    provider.last_error_time = time.time()
-                    self.call_history.append({
-                        "provider": provider.name,
-                        "status": "auth_failed" if status_code == 401 else "model_restricted",
-                        "error": error_msg,
-                        "timestamp": time.time(),
-                    })
-                else:
-                    # Rate limit or server error — retry with backoff
-                    provider.failure_count += 1
-                    provider.last_error = error_msg
-                    provider.last_error_time = time.time()
-                    failed_providers.append(provider.name)
-                    last_error = e
-                    self.call_history.append({
-                        "provider": provider.name,
-                        "status": "failed",
-                        "error": error_msg,
-                        "timestamp": time.time(),
-                    })
-                    if provider != providers_to_try[-1]:
-                        wait_time = self.retry_backoff_base ** len(failed_providers)
-                        time.sleep(min(wait_time, 10))
-                
-                continue
-            
-            except RequestException as e:
-                # Network-level errors (timeout, connection refused, etc.)
-                provider.failure_count += 1
-                provider.last_error = f"Network error: {str(e)}"
+                err_str    = str(e)
+                status     = self._http_status(e)
+
+                # Permanent auth failure → disable slot
+                if status == 401:
+                    provider.is_available = False
+
+                provider.failure_count  += 1
+                provider.last_error      = err_str[:200]
                 provider.last_error_time = time.time()
-                failed_providers.append(provider.name)
-                last_error = e
-                self.call_history.append({
-                    "provider": provider.name,
-                    "status": "failed",
-                    "error": str(e),
-                    "timestamp": time.time(),
-                })
-                if provider != providers_to_try[-1]:
-                    wait_time = self.retry_backoff_base ** len(failed_providers)
-                    time.sleep(min(wait_time, 10))
-                continue
-            
-            except AuthenticationError as e:
-                provider.is_available = False
-                provider.last_error = f"Auth failed: {str(e)}"
-                provider.last_error_time = time.time()
-                
-                self.call_history.append({
-                    "provider": provider.name,
-                    "status": "auth_failed",
-                    "error": str(e),
-                    "timestamp": time.time(),
-                })
-                
-                continue
-            
-            except BadRequestError as e:
-                # Retry without JSON mode if that's the issue
-                if json_mode:
-                    try:
-                        if provider.name == "bytez":
-                            content = self._call_bytez_api(
-                                normalized_model, messages, False
-                            )
-                        else:
-                            response = completion(
-                                model=normalized_model,
-                                messages=messages,
-                                base_url=provider.base_url,
-                                timeout=60,
-                            )
-                            content = response.choices[0].message.content or ""
-                        
-                        provider.failure_count = 0
-                        return content
-                    except Exception:
-                        pass
-                
-                provider.failure_count += 1
-                provider.last_error = str(e)
-                failed_providers.append(provider.name)
-                continue
-        
-        # All providers failed
-        error_summary = "\n".join([
-            f"  {p}: {self.providers[[x.name for x in self.providers].index(p)].last_error}"
-            for p in failed_providers
-        ])
+                failed.append(provider.name)
+                self._log("failed", provider.name,
+                          self._model_for(provider, preferred_model), err_str)
+
+                # Brief pause before next provider (skip on last)
+                if provider is not self.providers[-1]:
+                    wait = min(self.retry_backoff_base ** len(failed), 10)
+                    time.sleep(wait)
+
         raise RuntimeError(
-            f"All AI providers failed after {len(failed_providers)} attempts:\n{error_summary}"
+            f"All {len(failed)} provider(s) failed.\n"
+            + "\n".join(f"  {n}: {self.providers[[p.name for p in self.providers].index(n)].last_error}"
+                        for n in failed if n in [p.name for p in self.providers])
         )
-    
-    def get_call_history(self, limit: int = 10) -> List[Dict]:
-        """Get recent call history for debugging."""
-        return self.call_history[-limit:]
+
+    # ------------------------------------------------------------------
+    # Per-provider dispatch
+    # ------------------------------------------------------------------
+
+    def _call_provider(
+        self,
+        provider: ProviderConfig,
+        messages: List[Dict],
+        preferred_model: Optional[str],
+        json_mode: bool,
+    ) -> str:
+        model = self._model_for(provider, preferred_model)
+
+        # ── AIML API (OpenAI-compatible, direct requests) ─────────────
+        if provider.name.startswith("aiml_"):
+            return self._call_aiml(provider, model, messages, json_mode)
+
+        # ── Gemini via litellm ────────────────────────────────────────
+        if provider.name.startswith("gemini_"):
+            # Set the correct env var for litellm
+            env_key = "GOOGLE_API_KEY" if provider.name == "gemini_1" else "GOOGLE_API_KEY_2"
+            os.environ["GOOGLE_API_KEY"] = provider.api_key
+            gemini_model = self._gemini_model(preferred_model)
+            resp = completion(
+                model=gemini_model,
+                messages=messages,
+                response_format={"type": "json_object"} if json_mode else None,
+                timeout=60,
+            )
+            return resp.choices[0].message.content or ""
+
+        # ── OpenRouter via litellm ────────────────────────────────────
+        if provider.name == "openrouter":
+            or_model = self._openrouter_model(preferred_model)
+            resp = completion(
+                model=or_model,
+                messages=messages,
+                response_format={"type": "json_object"} if json_mode else None,
+                base_url=provider.base_url,
+                timeout=60,
+            )
+            return resp.choices[0].message.content or ""
+
+        raise ValueError(f"Unknown provider: {provider.name}")
+
+    # ------------------------------------------------------------------
+    # AIML API call
+    # ------------------------------------------------------------------
+
+    def _call_aiml(
+        self,
+        provider: ProviderConfig,
+        model: str,
+        messages: List[Dict],
+        json_mode: bool,
+        timeout: int = 60,
+    ) -> str:
+        """Call AIML API (OpenAI-compatible endpoint)."""
+        headers = {
+            "Authorization": f"Bearer {provider.api_key}",
+            "Content-Type":  "application/json",
+        }
+        payload: Dict = {
+            "model":    model,
+            "messages": messages,
+            "stream":   False,
+        }
+        if json_mode:
+            payload["response_format"] = {"type": "json_object"}
+
+        response = requests.post(
+            f"{provider.base_url}/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        # Standard OpenAI-compatible response
+        choices = data.get("choices", [])
+        if choices:
+            return choices[0].get("message", {}).get("content", "") or ""
+
+        # Fallback: return raw JSON string
+        return json.dumps(data)
+
+    # ------------------------------------------------------------------
+    # Model name helpers
+    # ------------------------------------------------------------------
+
+    def _model_for(self, provider: ProviderConfig, preferred: Optional[str]) -> str:
+        """Return the best model name for a given provider slot."""
+        if provider.name.startswith("aiml_"):
+            return self._aiml_model(preferred)
+        if provider.name.startswith("gemini_"):
+            return self._gemini_model(preferred)
+        if provider.name == "openrouter":
+            return self._openrouter_model(preferred)
+        return preferred or "default"
+
+    def _aiml_model(self, preferred: Optional[str]) -> str:
+        """Map the UI model selection to an AIML API model ID."""
+        if not preferred or preferred == "default":
+            return AIML_DEFAULT_MODEL
+        # If user picked a google/gemini model, use it directly on AIML
+        if preferred.startswith("google/"):
+            return preferred
+        # If user picked gemini/ (litellm prefix), strip prefix
+        if preferred.startswith("gemini/"):
+            return preferred.replace("gemini/", "google/", 1)
+        # OpenRouter models → map to AIML equivalent
+        if preferred.startswith("openrouter/"):
+            return AIML_DEFAULT_MODEL
+        return preferred
+
+    def _gemini_model(self, preferred: Optional[str]) -> str:
+        """Return a litellm-compatible Gemini model string."""
+        if not preferred or preferred == "default":
+            return GEMINI_DEFAULT_MODEL
+        if preferred.startswith("google/"):
+            return preferred.replace("google/", "gemini/", 1)
+        if preferred.startswith("gemini/"):
+            return preferred
+        return GEMINI_DEFAULT_MODEL
+
+    def _openrouter_model(self, preferred: Optional[str]) -> str:
+        if not preferred or preferred == "default":
+            return OPENROUTER_DEFAULT
+        if preferred.startswith("openrouter/"):
+            return preferred
+        return OPENROUTER_DEFAULT
+
+    # ------------------------------------------------------------------
+    # Utilities
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _http_status(exc: Exception) -> int:
+        """Extract HTTP status code from an exception if available."""
+        resp = getattr(exc, "response", None)
+        if resp is not None:
+            return getattr(resp, "status_code", 0)
+        return 0
+
+    def _log(self, status: str, provider: str, model: str, error: str = "") -> None:
+        entry = {
+            "provider":  provider,
+            "model":     model,
+            "status":    status,
+            "timestamp": time.time(),
+        }
+        if error:
+            entry["error"] = error[:200]
+        self.call_history.append(entry)
