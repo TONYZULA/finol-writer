@@ -18,18 +18,26 @@ if 'agent' not in st.session_state:
 with st.sidebar:
     st.title("⚙️ Settings")
     
-    # Provider and model selection
+    # Model selection – AIML API models (Gemini via AIML is the default)
     model = st.selectbox("Select AI Model", [
-        "Qwen/Qwen3-4B",
-        "Qwen/Qwen3-1.7B",
-        "Qwen/Qwen3-0.6B",
-        "google/gemini-1.5-flash",
-        "google/gemini-1.5-pro",
-        "openai/gpt-4o-mini",
-        "anthropic/claude-3-5-sonnet-latest",
+        # Google Gemini via AIML API (recommended)
+        "google/gemini-2.0-flash",
+        "google/gemini-2.5-flash",
+        "google/gemini-2.5-pro",
+        # Meta Llama via AIML API
+        "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+        "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
+        # Mistral via AIML API
+        "mistralai/Mistral-7B-Instruct-v0.3",
+        # OpenRouter free models (auto-enforced :free suffix)
+        "openrouter/google/gemma-3-27b-it:free",
+        "openrouter/google/gemma-3-12b-it:free",
+        "openrouter/meta-llama/llama-3.3-70b-instruct:free",
+        "openrouter/mistralai/mistral-small-3.1-24b-instruct:free",
+        "openrouter/qwen/qwen3-4b:free",
     ])
     
-    st.info("💡 Multi-provider fallback is enabled. If Bytez fails, the system will automatically try other configured providers (Google, OpenRouter).")
+    st.info("🔄 **Rolling Fallback Active**\nAIML (×3) → OpenRouter Free (×3) → Gemini (×2)")
     
     st.markdown("---")
     st.subheader("WordPress Credentials")
@@ -130,7 +138,7 @@ with tab1:
                     st.info(
                         "Common fixes (Streamlit Cloud):\n"
                         "- Add `TAVILY_API_KEY`\n"
-                        "- Add `BYTEZ_API_KEY`\n"
+                        "- Add at least one of: `AIML_API_KEY_1`, `OPENROUTER_API_KEY_1`, `GOOGLE_API_KEY`\n"
                     )
                     st.exception(e)
 
