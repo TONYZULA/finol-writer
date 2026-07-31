@@ -15,18 +15,8 @@ class FinolAutomation:
         # Safe loading from st.secrets to prevent blank screen crashes
         self.keys = {
             "TAVILY_API_KEY":      st.secrets.get("TAVILY_API_KEY", ""),
-            "TEMPLATED_API_KEY":   st.secrets.get("TEMPLATED_API_KEY", ""),
-            # AIML API – 3 independent keys
-            "AIML_API_KEY_1":      st.secrets.get("AIML_API_KEY_1", ""),
-            "AIML_API_KEY_2":      st.secrets.get("AIML_API_KEY_2", ""),
-            "AIML_API_KEY_3":      st.secrets.get("AIML_API_KEY_3", ""),
-            # OpenRouter – 3 independent keys (FREE models only)
-            "OPENROUTER_API_KEY_1": st.secrets.get("OPENROUTER_API_KEY_1", ""),
-            "OPENROUTER_API_KEY_2": st.secrets.get("OPENROUTER_API_KEY_2", ""),
-            "OPENROUTER_API_KEY_3": st.secrets.get("OPENROUTER_API_KEY_3", ""),
-            # Gemini – 2 independent keys
-            "GOOGLE_API_KEY":      st.secrets.get("GOOGLE_API_KEY", ""),
-            "GOOGLE_API_KEY_2":    st.secrets.get("GOOGLE_API_KEY_2", ""),
+            # OpenRouter API – required for AI draft generation
+            "OPENROUTER_API_KEY":  st.secrets.get("OPENROUTER_API_KEY", ""),
         }
         
         # Initialize provider manager for multi-provider fallback
@@ -441,7 +431,7 @@ INSTRUCTION: Write only the content for this specific section. Use headings ONLY
 """
             
             try:
-                # Use plain text mode for higher reliability with Bytez models
+                # Use plain text mode for higher reliability
                 written = self.ai_call(writer_sys, section_input, json_mode=False)
                 
                 # CLEANING: Remove the section title if the AI repeated it at the start

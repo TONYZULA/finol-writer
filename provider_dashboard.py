@@ -1,7 +1,6 @@
 """
 Streamlit dashboard – AI provider health monitoring.
-Reflects the new rolling-fallback architecture:
-  AIML (×3) → OpenRouter FREE (×3) → Gemini (×2)
+OpenRouter-only architecture with model fallback ladder and health tracking.
 """
 
 import streamlit as st
@@ -10,21 +9,21 @@ from automation import FinolAutomation
 
 # Human-readable labels for each provider slot
 SLOT_LABELS = {
-    "aiml_1":        "AIML API – Key 1 (auto)",
-    "aiml_2":        "AIML API – Key 2 (muli)",
-    "aiml_3":        "AIML API – Key 3 (harsi)",
-    "openrouter_1":  "OpenRouter – Key 1 [FREE only]",
-    "openrouter_2":  "OpenRouter – Key 2 [FREE only]",
-    "openrouter_3":  "OpenRouter – Key 3 [FREE only]",
-    "gemini_1":      "Gemini – Key 1",
-    "gemini_2":      "Gemini – Key 2",
+    "openrouter": "OpenRouter",
 }
 
 SLOT_ICONS = {
-    "aiml":       "🤖",
-    "openrouter": "🔀",
-    "gemini":     "✨",
+    "openrouter": "🤖",
 }
+
+FREE_MODELS = [
+    "google/gemma-4-26b-a4b-it:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "openai/gpt-oss-20b:free",
+    "inclusionai/ling-3.0-flash:free",
+    "nvidia/nemotron-nano-9b-v2:free",
+    "google/gemma-4-31b-it:free",
+]
 
 
 def _slot_icon(name: str) -> str:
@@ -52,11 +51,9 @@ def show_provider_status(agent: FinolAutomation):
         st.metric("Configured Slots", len(status))
 
     # Fallback order diagram
-    st.markdown("**Fallback Order:**")
+    st.markdown("**Provider Order:**")
     order_parts = []
-    for slot in ["aiml_1", "aiml_2", "aiml_3",
-                 "openrouter_1", "openrouter_2", "openrouter_3",
-                 "gemini_1", "gemini_2"]:
+    for slot in ["openrouter"]:
         if slot in status:
             icon  = _slot_icon(slot)
             avail = "✅" if status[slot]["available"] else "❌"
@@ -128,44 +125,32 @@ def show_call_history(agent: FinolAutomation, limit: int = 20):
 
 def show_provider_selector(default_model: str = None):
     """Standalone model selector widget (used externally if needed)."""
-    models = [
-        "google/gemini-2.0-flash",
-        "google/gemini-2.5-flash",
-        "openrouter/google/gemma-3-27b-it:free",
-        "openrouter/meta-llama/llama-3.3-70b-instruct:free",
-        "openrouter/mistralai/mistral-small-3.1-24b-instruct:free",
-    ]
+    models = list(FREE_MODELS)
     idx = models.index(default_model) if default_model in models else 0
     return st.selectbox("Select Model", models, index=idx)
 
 
 def show_fallback_info():
-    """Sidebar expander explaining the fallback system."""
-    with st.expander("ℹ️ About Fallback System"):
-        st.markdown("""
-### Rolling Multi-Provider Fallback
+    """Sidebar expander explaining the OpenRouter fallback system."""
+    with st.expander("ℹ️ About AI Provider"):
+        rows = "".join(f"| {i} | `{m}` | {'Primary' if i == 1 else 'Fallback'} |\n"
+                       for i, m in enumerate(FREE_MODELS, 1))
+        st.markdown(f"""
+### OpenRouter
 
-**Provider order (8 independent slots):**
+**Single provider with a free-model fallback ladder:**
 
-| # | Provider | Notes |
-|---|----------|-------|
-| 1 | 🤖 AIML API – Key 1 | Primary |
-| 2 | 🤖 AIML API – Key 2 | Fallback |
-| 3 | 🤖 AIML API – Key 3 | Fallback |
-| 4 | 🔀 OpenRouter – Key 1 | **FREE models only** |
-| 5 | 🔀 OpenRouter – Key 2 | **FREE models only** |
-| 6 | 🔀 OpenRouter – Key 3 | **FREE models only** |
-| 7 | ✨ Gemini – Key 1 | Fallback |
-| 8 | ✨ Gemini – Key 2 | Last resort |
+| # | Model | Notes |
+|---|-------|-------|
+{rows}
+**What triggers a model switch:**
+- API 5xx errors (retried with exponential backoff)
+- Free-tier rate limiting (429)
+- Model unavailable / removed from the free catalog
 
-**What triggers a slot switch:**
-- Rate limit exceeded
-- API connection error
-- Timeout (>60 s)
-- Authentication failure (disables slot permanently)
-
-**OpenRouter free-model enforcement:**
-All OpenRouter calls are forced to `:free` models regardless of what is selected in the dropdown.
+**Free models only:**
+All models are `:free`-suffixed and verified to work with this key.
+If all free models fail, check `OPENROUTER_API_KEY` in Secrets.
         """)
 
 
