@@ -1,6 +1,7 @@
 import streamlit as st
 from automation import FinolAutomation
 from provider_dashboard import (
+    show_model_selector,
     show_provider_status,
     show_call_history,
     show_provider_selector,
@@ -14,18 +15,14 @@ if 'draft' not in st.session_state:
     st.session_state.draft = ""
 if 'agent' not in st.session_state:
     st.session_state.agent = None
+if 'selected_model' not in st.session_state:
+    st.session_state.selected_model = "google/gemma-4-26b-a4b-it:free"
 
 with st.sidebar:
     st.title("⚙️ Settings")
     
-    # Model selection – OpenRouter free models (verified working)
-    model = st.selectbox("Select AI Model", [
-        "google/gemma-4-26b-a4b-it:free",
-        "nvidia/nemotron-3-super-120b-a12b:free",
-        "openai/gpt-oss-20b:free",
-        "inclusionai/ling-3.0-flash:free",
-        "nvidia/nemotron-nano-9b-v2:free",
-    ])
+    st.markdown(f"**🧠 AI Model:** `{st.session_state.selected_model}`")
+    st.caption("Change it on the 📊 Provider Monitor tab")
     
     st.markdown("---")
     st.subheader("WordPress Credentials")
@@ -109,6 +106,7 @@ with tab1:
                     knowledge_base.append({"title": title.strip(), "url": url})
 
         if st.button("Generate Draft"):
+            model = st.session_state.selected_model
             agent = FinolAutomation(model)
             st.session_state.agent = agent
             with st.spinner("Writing..."):
@@ -125,9 +123,16 @@ with tab1:
                     st.error("Draft generation failed.")
                     st.info(
                         "Common fixes (Streamlit Cloud):\n"
-                        "- Add `TAVILY_API_KEY`\n"
-                        "- Add `OPENROUTER_API_KEY`\n"
+                        "- Add `TAVILY_API_KEY` to Settings → Secrets\n"
+                        "- Add `OPENROUTER_API_KEY` to Settings → Secrets\n"
+                        "Or run the app locally with these as environment variables."
                     )
+                    if "OPENROUTER_API_KEY" in str(e):
+                        st.code(
+                            "In Streamlit Cloud: Settings → Secrets\n\n"
+                            "OPENROUTER_API_KEY = \"sk-or-v1-...\"\n"
+                            "TAVILY_API_KEY = \"tvly-...\""
+                        )
                     st.exception(e)
 
     if st.session_state.draft:
@@ -145,6 +150,7 @@ with tab1:
                     "user": wp_user.strip(), 
                     "pass": wp_pass.strip()
                 }
+                model = st.session_state.selected_model
                 agent = FinolAutomation(model)
                 st.session_state.agent = agent
                 with st.spinner("Uploading Media & Post..."):
@@ -177,6 +183,9 @@ with tab1:
                         st.exception(e)
 
 with tab2:
+    st.subheader("🧠 AI Model")
+    show_model_selector()
+    st.divider()
     if st.session_state.agent:
         show_provider_status(st.session_state.agent)
         st.divider()

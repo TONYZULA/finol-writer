@@ -33,6 +33,26 @@ def _slot_icon(name: str) -> str:
     return "🔌"
 
 
+def show_model_selector(default_model: str = None) -> str:
+    """Model selection widget. Persists the choice in session_state so it
+    drives draft generation regardless of which tab is active."""
+    options = list(FREE_MODELS)
+    idx = 0
+    if default_model and default_model in options:
+        idx = options.index(default_model)
+    elif st.session_state.get("selected_model") in options:
+        idx = options.index(st.session_state["selected_model"])
+
+    selected = st.selectbox(
+        "Select AI Model",
+        options,
+        index=idx,
+        help="The AI model used for generating new drafts. Falls back to the next model automatically on rate limits.",
+    )
+    st.session_state["selected_model"] = selected
+    return selected
+
+
 def show_provider_status(agent: FinolAutomation):
     """Display provider health status."""
     st.subheader("🔄 Provider Status")

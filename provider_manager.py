@@ -123,8 +123,9 @@ class ProviderManager:
         providers = [p for p in self.providers if p.is_available]
         if not providers:
             raise RuntimeError(
-                "No AI provider configured. "
-                "Add OPENROUTER_API_KEY to Streamlit Secrets."
+                "No AI provider configured. Add OPENROUTER_API_KEY to your "
+                "Streamlit Secrets (Settings → Secrets) or set it as the "
+                "OPENROUTER_API_KEY environment variable."
             )
 
         provider = providers[0]

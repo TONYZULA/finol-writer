@@ -12,11 +12,12 @@ class FinolAutomation:
     def __init__(self, model):
         self.model = model
         
-        # Safe loading from st.secrets to prevent blank screen crashes
+        # Safe loading from st.secrets to prevent blank screen crashes.
+        # Falls back to environment variables so the app also works locally.
         self.keys = {
-            "TAVILY_API_KEY":      st.secrets.get("TAVILY_API_KEY", ""),
+            "TAVILY_API_KEY":      st.secrets.get("TAVILY_API_KEY", "") or os.environ.get("TAVILY_API_KEY", ""),
             # OpenRouter API – required for AI draft generation
-            "OPENROUTER_API_KEY":  st.secrets.get("OPENROUTER_API_KEY", ""),
+            "OPENROUTER_API_KEY":  st.secrets.get("OPENROUTER_API_KEY", "") or os.environ.get("OPENROUTER_API_KEY", ""),
         }
         
         # Initialize provider manager for multi-provider fallback
@@ -321,12 +322,14 @@ class FinolAutomation:
         seo_data = self.ai_call(seo_sys, f"Topic: {topic}, Audience: {audience}, Sources: {urls}")
         
         # Handle SEO data parsing errors
-        if isinstance(seo_data, dict) and "error" in seo_data:
+        if not isinstance(seo_data, dict):
+            seo_data = {}
+        if "error" in seo_data or "keywords" not in seo_data:
             seo_data = {
                 "primary_keyword": topic,
                 "keywords": [topic, audience, "solutions", "strategies", "benefits"]
             }
-        elif isinstance(seo_data, dict):
+        else:
             primary = seo_data.get("primary_keyword", topic)
             raw_keywords = seo_data.get("keywords", [])
             if not isinstance(raw_keywords, list):
